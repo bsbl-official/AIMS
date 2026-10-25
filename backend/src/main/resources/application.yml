@@ -1,0 +1,56 @@
+spring:
+  application:
+    name: accounting-api
+  datasource:
+    url: ${DB_URL:jdbc:postgresql://localhost:5433/account_bm}
+    username: ${DB_USERNAME:account_bm}
+    password: ${DB_PASSWORD:account_bm}
+    hikari:
+      maximum-pool-size: ${DB_POOL_MAX_SIZE:20}
+      minimum-idle: ${DB_POOL_MIN_IDLE:5}
+      connection-timeout: 30000
+      max-lifetime: 1800000
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: validate
+    properties:
+      hibernate:
+        jdbc:
+          time_zone: UTC
+          batch_size: 50
+        order_inserts: true
+        order_updates: true
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+  mvc:
+    problemdetails:
+      enabled: true
+server:
+  port: ${SERVER_PORT:8080}
+  shutdown: graceful
+  forward-headers-strategy: framework
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics
+  endpoint:
+    health:
+      probes:
+        enabled: true
+
+app:
+  cors:
+    allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:5173}
+  jwt:
+    issuer: ${JWT_ISSUER:account-bm-api}
+    secret: ${JWT_SECRET:account-bm-development-secret-change-before-production}
+    access-token-minutes: ${JWT_ACCESS_TOKEN_MINUTES:15}
+    refresh-token-days: ${JWT_REFRESH_TOKEN_DAYS:7}
+  bootstrap:
+    admin-email: ${SUPER_ADMIN_EMAIL:admin@accountbm.local}
+    admin-password: ${SUPER_ADMIN_PASSWORD:ChangeMe123!}
+    admin-name: ${SUPER_ADMIN_NAME:System Administrator}

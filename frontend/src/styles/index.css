@@ -1,0 +1,19 @@
+@import url('https://fonts.googleapis.com/css2?family=Roboto:wght@400;500&display=swap');
+@import "tailwindcss";
+
+@theme {
+  --font-sans: 'Roboto', sans-serif;
+  --font-display: 'Roboto', sans-serif;
+}
+
+@layer base {
+  body { @apply m-0 min-h-screen min-w-80 bg-[#f4f5f1] font-sans text-[#203236] antialiased; }
+  button, input, select, textarea { font: inherit; }
+  strong, b { font-weight: 500; }
+}
+
+@keyframes skeleton-shimmer { to { transform: translateX(100%); } }
+@keyframes toast-enter {
+  from { opacity: 0; transform: translateY(-10px) translateX(8px); }
+  to { opacity: 1; transform: translate(0); }
+}

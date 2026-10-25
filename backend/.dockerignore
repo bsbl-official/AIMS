@@ -1,0 +1,8 @@
+.gradle
+build
+.git
+.gitignore
+.env
+*.log
+Dockerfile*
+HELP.md
