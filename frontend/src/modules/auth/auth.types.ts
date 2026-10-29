@@ -16,8 +16,6 @@ export type CurrentUser = {
 }
 
 export type TokenResponse = {
-  accessToken: string
-  refreshToken: string
   expiresInSeconds: number
   user: CurrentUser
 }

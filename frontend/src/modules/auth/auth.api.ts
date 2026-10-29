@@ -6,13 +6,11 @@ export const authApi = {
     method: 'POST',
     body: JSON.stringify({ email, password }),
   }),
-  refresh: (refreshToken: string) => request<TokenResponse>('/auth/refresh', {
+  refresh: () => request<TokenResponse>('/auth/refresh', {
     method: 'POST',
-    body: JSON.stringify({ refreshToken }),
   }, false),
-  logout: (refreshToken: string) => request<void>('/auth/logout', {
+  logout: () => request<void>('/auth/logout', {
     method: 'POST',
-    body: JSON.stringify({ refreshToken }),
   }, false),
   me: () => request<CurrentUser>('/auth/me'),
 }

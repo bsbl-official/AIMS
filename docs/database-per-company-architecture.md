@@ -2,7 +2,7 @@
 
 ## Target topology
 
-Account BM uses one **platform database** and one **tenant database per company**.
+AIMS uses one **platform database** and one **tenant database per company**.
 
 ```text
 account_bm_platform

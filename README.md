@@ -1,4 +1,4 @@
-# Account BM
+# AIMS
 
 Foundation for a multi-user accounting application with a React frontend, Spring Boot backend, a PostgreSQL platform database, and an isolated PostgreSQL database for each company.
 
@@ -76,7 +76,9 @@ On Windows, use `gradlew.bat bootRun`. The backend issues its own signed JWT acc
 ## Authentication and access control
 
 - Access tokens are short-lived HS256 JWTs; refresh tokens are random values stored in PostgreSQL only as SHA-256 hashes.
+- The browser receives access and refresh credentials only as `HttpOnly`, `SameSite` cookies; they are never stored in web storage or exposed in API response bodies. CSRF tokens protect state-changing requests.
 - Refresh tokens rotate on use and are revoked on logout or when a user is disabled.
+- Set `AUTH_COOKIE_SECURE=true` in every HTTPS deployment. The default is `false` only so local HTTP development works.
 - Five failed password attempts lock an account for 15 minutes.
 - Roles belong to an organization and can be assigned any seeded permission through the Users & access screen.
 - Administrative changes and login events are written to the append-only audit trail.

@@ -1,9 +1,34 @@
 import {Menu} from 'lucide-react'
+import {useEffect, useState} from 'react'
 import {useAuth} from '../../modules/auth/hooks/useAuth'
+import {companyApi} from '../../modules/company/api/company.api'
 
 export function TopHeader({onMenuToggle}: { onMenuToggle: () => void }) {
     const {user} = useAuth()
     const organization = user?.organizations[0]
+    const [accessibleCompanyName, setAccessibleCompanyName] = useState('')
+
+    useEffect(() => {
+        if (!user || organization) {
+            setAccessibleCompanyName('')
+            return
+        }
+
+        let active = true
+        void companyApi.companies()
+            .then((companies) => {
+                if (active) setAccessibleCompanyName(companies[0]?.legalName ?? '')
+            })
+            .catch(() => {
+                if (active) setAccessibleCompanyName('')
+            })
+
+        return () => {
+            active = false
+        }
+    }, [organization, user])
+
+    const companyName = organization?.organizationName ?? accessibleCompanyName
     const initials = user?.displayName
         .split(/\s+/)
         .map((part) => part[0])
@@ -21,7 +46,7 @@ export function TopHeader({onMenuToggle}: { onMenuToggle: () => void }) {
             <div className="min-w-0">
                 <small
                     className="mt-0.5 block text-[11px] tracking-[.08em] text-[#778784] uppercase">Organization</small>
-                <strong className="block truncate">{organization?.organizationName ?? 'Account BM'}</strong>
+                <strong className="block truncate">{companyName || 'No company assigned'}</strong>
             </div>
         </div>
         <div className="flex items-center gap-3">

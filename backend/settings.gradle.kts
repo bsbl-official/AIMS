@@ -1,1 +1,1 @@
-rootProject.name = "accounting-api"
+rootProject.name = "aims-api"

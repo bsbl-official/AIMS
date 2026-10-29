@@ -14,14 +14,14 @@ public final class IdentityDtos {
     private IdentityDtos() {}
 
     public record LoginRequest(@Email @NotBlank String email, @NotBlank String password) {}
-    public record RefreshRequest(@NotBlank String refreshToken) {}
-    public record LogoutRequest(@NotBlank String refreshToken) {}
-
     public record TokenResponse(
             String accessToken,
             String refreshToken,
             long expiresInSeconds,
             CurrentUser user) {}
+
+    public record AuthResponse(long expiresInSeconds, CurrentUser user) {}
+    public record CsrfResponse(String token) {}
 
     public record OrganizationAccess(
             UUID organizationId,

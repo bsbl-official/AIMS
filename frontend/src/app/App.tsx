@@ -12,6 +12,7 @@ import { BranchSetupPage } from '../pages/setup/branch/BranchSetupPage'
 import { ProjectCodeSetupPage } from '../pages/setup/project-code/ProjectCodeSetupPage'
 import { FinanceCodeSetupPage } from '../pages/setup/finance-code/FinanceCodeSetupPage'
 import { ComponentCodeSetupPage } from '../pages/setup/component-code/ComponentCodeSetupPage'
+import { FinancialYearSetupPage } from '../pages/setup/financial-year/FinancialYearSetupPage'
 
 export function App() {
   return (
@@ -30,6 +31,7 @@ export function App() {
           <Route path="setup/project-codes" element={<ProjectCodeSetupPage />} />
           <Route path="setup/finance-codes" element={<FinanceCodeSetupPage />} />
           <Route path="setup/component-codes" element={<ComponentCodeSetupPage />} />
+          <Route path="setup/financial-year" element={<FinancialYearSetupPage />} />
           <Route path="setup/financial-statements" element={<FinancialStatementSetupPage />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Route>

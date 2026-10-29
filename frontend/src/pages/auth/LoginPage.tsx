@@ -23,7 +23,7 @@ export function LoginPage() {
     setSubmitting(true)
     try {
       await login(email, password)
-      toast.success('You are now signed in to Account BM.', 'Welcome back')
+      toast.success('You are now signed in to AIMS.', 'Welcome back')
       const next = (location.state as { from?: string } | null)?.from ?? '/'
       navigate(next, { replace: true })
     } catch (reason) {
@@ -36,7 +36,7 @@ export function LoginPage() {
   return (
     <main className="grid min-h-screen grid-cols-[minmax(360px,540px)_1fr] bg-white max-md:block max-md:bg-[#f4f5f1]">
       <section className="flex flex-col justify-center p-[clamp(42px,8vw,100px)] max-md:min-h-screen max-md:px-6 max-md:py-8">
-        <div className="mb-16 max-md:mb-12"><Brand compact tone="dark" /></div>
+        <div className="mb-14 max-md:mb-10"><Brand placement="login" tone="dark" /></div>
         <span className="text-[11px] font-medium tracking-[.13em] text-[#9b7043] uppercase">Secure workspace</span>
         <h1 className="mt-[7px] mb-[5px] font-display text-[clamp(30px,3vw,42px)] font-medium text-[#183137]">Welcome back</h1>
         <p className="mt-0 mb-[30px] leading-[1.6] text-[#70807d]">Sign in to manage your organization and accounting records.</p>

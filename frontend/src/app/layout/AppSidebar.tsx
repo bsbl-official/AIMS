@@ -10,7 +10,8 @@ const transactionItems: SidebarMenuItem[] = [
 ]
 
 export function AppSidebar({open, onClose}: { open: boolean; onClose: () => void }) {
-    const {can} = useAuth()
+    const {can, user} = useAuth()
+    const isFinancialYearAdmin = Boolean(user?.superAdmin || user?.organizations.some((organization) => organization.roles.includes('COMPANY_ADMIN')))
     const setupItems: SidebarMenuItem[] = [
         ...(can('companies.read') || can('companies.manage') ? [{to: '/setup/company', label: 'Company setup'}] : []),
         ...(can('branches.read') || can('branches.manage') ? [{to: '/setup/branches', label: 'Branch setup'}] : []),
@@ -27,6 +28,10 @@ export function AppSidebar({open, onClose}: { open: boolean; onClose: () => void
             label: 'Component setup'
         }] : []),
         ...(can('coa.read') || can('coa.manage') ? [{to: '/accounts', label: 'COA setup'}] : []),
+        ...(isFinancialYearAdmin ? [{
+            to: '/setup/financial-year',
+            label: 'Financial year setup'
+        }] : []),
         ...(can('financial_statements.read') || can('financial_statements.manage') ? [{
             to: '/setup/financial-statements',
             label: 'Financial Statement setup'
@@ -42,10 +47,10 @@ export function AppSidebar({open, onClose}: { open: boolean; onClose: () => void
 
     return <aside
         className={`fixed inset-y-0 left-0 z-40 flex w-[280px] flex-col overflow-y-auto bg-[#132a2f] px-5 pt-6 pb-5 text-[#eef3ed] shadow-[18px_0_48px_rgba(8,28,31,.24)] transition-transform duration-200 lg:static lg:z-auto lg:w-auto lg:min-h-screen lg:translate-x-0 lg:pt-8 lg:shadow-none ${open ? 'translate-x-0' : '-translate-x-full'}`}>
-        <div className="flex items-start justify-between px-2.5 pb-7">
+        <div className="relative flex items-center justify-center px-2.5 pb-7">
             <Brand/>
             <button
-                className="grid size-9 cursor-pointer place-items-center rounded-lg border border-[#355157] bg-transparent text-[#b9c8c6] hover:bg-[#1a383e] hover:text-white lg:hidden"
+                className="absolute top-0 right-2.5 grid size-9 cursor-pointer place-items-center rounded-lg border border-[#355157] bg-transparent text-[#b9c8c6] hover:bg-[#1a383e] hover:text-white lg:hidden"
                 type="button" onClick={onClose} aria-label="Close navigation"><X className="size-5" aria-hidden/>
             </button>
         </div>

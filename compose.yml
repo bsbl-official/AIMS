@@ -38,6 +38,8 @@ services:
       JWT_SECRET: ${JWT_SECRET:-account-bm-development-secret-change-before-production}
       JWT_ACCESS_TOKEN_MINUTES: ${JWT_ACCESS_TOKEN_MINUTES:-15}
       JWT_REFRESH_TOKEN_DAYS: ${JWT_REFRESH_TOKEN_DAYS:-7}
+      AUTH_COOKIE_SECURE: ${AUTH_COOKIE_SECURE:-false}
+      AUTH_COOKIE_SAME_SITE: ${AUTH_COOKIE_SAME_SITE:-Strict}
       SUPER_ADMIN_EMAIL: ${SUPER_ADMIN_EMAIL:-admin@accountbm.local}
       SUPER_ADMIN_PASSWORD: ${SUPER_ADMIN_PASSWORD:-ChangeMe123!}
       SUPER_ADMIN_NAME: ${SUPER_ADMIN_NAME:-System Administrator}

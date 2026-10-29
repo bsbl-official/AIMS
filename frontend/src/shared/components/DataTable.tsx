@@ -25,19 +25,19 @@ export function DataTable<T>({ columns, rows, rowKey, emptyMessage = 'No records
         <colgroup>
           {columns.map((column) => <col key={column.key} className={column.headerGroup ? 'w-16' : undefined} />)}
         </colgroup>
-        <thead className="bg-[linear-gradient(100deg,#dcefe8,#edf6f1_58%,#f3e7ca)]">
+        <thead className="bg-[linear-gradient(100deg,#d1e9e0,#e5f2ec_58%,#efe0bc)]">
           <tr>
             {columns.map((column, index) => {
               if (column.headerGroup && columns[index - 1]?.headerGroup === column.headerGroup) return null
               if (column.headerGroup) {
                 const colSpan = columns.slice(index).findIndex((candidate) => candidate.headerGroup !== column.headerGroup)
-                return <th key={`group-${column.headerGroup}`} colSpan={colSpan === -1 ? columns.length - index : colSpan} className="border-b border-[#cbded6] px-1 py-1 text-center text-[11px] leading-4 font-normal tracking-[.07em] text-[#55706b] uppercase">{column.headerGroup}</th>
+                return <th key={`group-${column.headerGroup}`} colSpan={colSpan === -1 ? columns.length - index : colSpan} className="border-b border-[#bfd5cc] px-1 py-1.5 text-center text-[12px] leading-4 font-semibold tracking-[.07em] text-[#315f5c] uppercase">{column.headerGroup}</th>
               }
-              return <th key={column.key} rowSpan={hasGroupedHeaders ? 2 : 1} className={`border-b border-[#cbded6] px-3 py-2.5 align-middle text-[11px] leading-4 font-normal tracking-[.07em] text-[#55706b] uppercase ${alignClass(column.align)}`}>{column.header}</th>
+              return <th key={column.key} rowSpan={hasGroupedHeaders ? 2 : 1} className={`border-b border-[#bfd5cc] px-3 py-3 align-middle text-[12px] leading-4 font-semibold tracking-[.07em] text-[#315f5c] uppercase ${alignClass(column.align)}`}>{column.header}</th>
             })}
           </tr>
           {hasGroupedHeaders && <tr>
-            {columns.filter((column) => column.headerGroup).map((column) => <th key={column.key} className={`border-b border-l border-[#cbded6] px-1 py-1 text-[11px] leading-4 font-normal tracking-[.04em] text-[#55706b] uppercase first:border-l-0 ${alignClass(column.align)}`}>{column.header}</th>)}
+            {columns.filter((column) => column.headerGroup).map((column) => <th key={column.key} className={`border-b border-l border-[#bfd5cc] px-1 py-1.5 text-[12px] leading-4 font-semibold tracking-[.04em] text-[#315f5c] uppercase first:border-l-0 ${alignClass(column.align)}`}>{column.header}</th>)}
           </tr>}
         </thead>
         <tbody>

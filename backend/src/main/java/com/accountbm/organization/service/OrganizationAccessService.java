@@ -57,4 +57,28 @@ public class OrganizationAccessService {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "You do not have access to this company");
         }
     }
+
+    public void requireCompanyAdministrator(UUID actorId, UUID companyId) {
+        if (companyId == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Company is required");
+        }
+        if (isSuperAdmin(actorId)) return;
+        var isCompanyAdministrator = Boolean.TRUE.equals(jdbc.queryForObject("""
+                SELECT EXISTS (
+                    SELECT 1
+                    FROM organization_memberships membership
+                    JOIN user_profiles user_profile ON user_profile.id = membership.user_id
+                    JOIN membership_roles membership_role ON membership_role.membership_id = membership.id
+                    JOIN roles role ON role.id = membership_role.role_id
+                    WHERE membership.user_id = ? AND membership.organization_id = ?
+                      AND user_profile.assigned_organization_id = membership.organization_id
+                      AND membership.status = 'ACTIVE' AND user_profile.status = 'ACTIVE'
+                      AND role.code = 'COMPANY_ADMIN'
+                )
+                """, Boolean.class, actorId, companyId));
+        if (!isCompanyAdministrator) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN,
+                    "Only a super administrator or company administrator can access financial year setup");
+        }
+    }
 }

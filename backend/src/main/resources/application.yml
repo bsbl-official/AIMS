@@ -1,6 +1,6 @@
 spring:
   application:
-    name: accounting-api
+    name: aims-api
   datasource:
     url: ${DB_URL:jdbc:postgresql://localhost:5433/account_bm}
     username: ${DB_USERNAME:account_bm}
@@ -50,6 +50,9 @@ app:
     secret: ${JWT_SECRET:account-bm-development-secret-change-before-production}
     access-token-minutes: ${JWT_ACCESS_TOKEN_MINUTES:15}
     refresh-token-days: ${JWT_REFRESH_TOKEN_DAYS:7}
+  auth-cookie:
+    secure: ${AUTH_COOKIE_SECURE:false}
+    same-site: ${AUTH_COOKIE_SAME_SITE:Strict}
   bootstrap:
     admin-email: ${SUPER_ADMIN_EMAIL:admin@accountbm.local}
     admin-password: ${SUPER_ADMIN_PASSWORD:ChangeMe123!}
