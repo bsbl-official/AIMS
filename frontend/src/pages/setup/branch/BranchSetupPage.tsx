@@ -1,5 +1,6 @@
 ﻿import { Pencil } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import { Plus as PlusIcon } from 'lucide-react'
 import { useAuth } from '../../../modules/auth/hooks/useAuth'
 import { useToast } from '../../../modules/toast/hooks/useToast'
 import { ApiError } from '../../../shared/api/httpClient'
@@ -77,7 +78,7 @@ export function BranchSetupPage() {
     await loadBranches(values.companyId)
   }
 
-  return <PageContainer breadcrumbs={[{ label: 'Dashboard', to: '/' }, { label: 'Setup' }, { label: 'Branch setup' }]} title="Branch setup" action={canEdit && companyId ? <Button onClick={() => setEditing(null)}>Add branch</Button> : undefined}>
+  return <PageContainer breadcrumbs={[{ label: 'Dashboard', to: '/' }, { label: 'Setup' }, { label: 'Branch setup' }]} title="Branch setup" action={canEdit && companyId ? <Button onClick={() => setEditing(null)}><span className="inline-flex items-center gap-2"><PlusIcon className="size-4" aria-hidden />Add New</span></Button> : undefined}>
     <div className="mb-4 flex justify-end">
       <div className="grid grid-cols-[auto_300px] items-center gap-3 text-[13px] font-medium text-[#405653] max-sm:w-full max-sm:grid-cols-1">
         <span>Company</span>
@@ -89,7 +90,7 @@ export function BranchSetupPage() {
         <DataTable columns={columns} rows={branches} rowKey={(branch) => branch.id} emptyMessage={companyId ? 'No branches are configured for this company.' : 'No companies are available.'} />
       </SkeletonBoundary>
     </Card>
-    <Modal open={editing !== undefined} title={editing ? 'Edit branch' : 'Create branch'} onClose={() => setEditing(undefined)}>
+    <Modal open={editing !== undefined} title={editing ? 'Edit Branch' : 'Create New Branch'} onClose={() => setEditing(undefined)}>
       <BranchForm branch={editing ?? undefined} companies={companies} defaultCompanyId={companyId} onSave={save} onCancel={() => setEditing(undefined)} />
     </Modal>
   </PageContainer>

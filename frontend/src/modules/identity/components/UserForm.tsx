@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from 'react'
 import { ApiError } from '../../../shared/api/httpClient'
 import { Button } from '../../../shared/components/Button'
+import { ModalActions } from '../../../shared/components/Modal'
 import { PasswordInput } from '../../../shared/components/PasswordInput'
 import type { CreateUserInput, ManagedUser, Role } from '../identity.types'
 import type { Branch } from '../../branch/branch.types'
@@ -58,7 +59,7 @@ export function UserForm({ organizationId, roles, branches, user, onSave, onCanc
       {user && <div className="grid gap-[7px] text-[13px] font-medium text-[#405653]"><span>Account status</span><SearchableSelect ariaLabel="Account status" options={USER_STATUS_OPTIONS} value={status} onChange={setStatus} searchPlaceholder="Search statuses..." /></div>}
       <RoleSelector roles={roles} selected={roleIds} onChange={setRoleIds} />
       <BranchSelector branches={branches} selected={branchIds} onChange={setBranchIds} />
-      <div className="flex justify-end gap-2.5 pt-1"><Button type="button" variant="secondary" onClick={onCancel}>Cancel</Button><Button type="submit" disabled={saving}>{saving ? 'Saving...' : user ? 'Save changes' : 'Create user'}</Button></div>
+    <ModalActions><Button type="button" variant="secondary" onClick={onCancel}>Cancel</Button><Button type="submit" disabled={saving}>{saving ? 'Saving...' : 'Save'}</Button></ModalActions>
     </form>
   )
 }

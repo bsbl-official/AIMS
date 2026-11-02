@@ -2,7 +2,7 @@ import { X } from 'lucide-react'
 import { useEffect, useId, useRef, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 
-type ModalSize = 'medium' | 'large'
+type ModalSize = 'medium' | 'large' | 'xlarge'
 
 type ModalProps = {
   open: boolean
@@ -10,14 +10,20 @@ type ModalProps = {
   children: ReactNode
   onClose: () => void
   size?: ModalSize
+  description?: string
 }
 
 const sizeClasses: Record<ModalSize, string> = {
-  medium: 'sm:w-[620px] sm:h-[620px]',
-  large: 'sm:w-[720px] sm:h-[760px]',
+  medium: 'sm:w-[560px]',
+  large: 'sm:w-[720px]',
+  xlarge: 'h-[calc(100dvh-16px)] sm:h-[calc(100dvh-32px)] sm:max-h-[820px] sm:w-[1180px]',
 }
 
-export function Modal({ open, title, children, onClose, size = 'large' }: ModalProps) {
+export function ModalActions({ children, className = '' }: { children: ReactNode; className?: string }) {
+  return <div className={`col-span-full -mx-5 -mb-5 mt-2 flex flex-wrap items-center justify-end gap-2.5 border-t border-[#d9e4df] bg-[#f4f8f6] px-5 py-4 sm:-mx-6 sm:-mb-6 sm:px-6 ${className}`.trim()}>{children}</div>
+}
+
+export function Modal({ open, title, children, onClose, size = 'large', description }: ModalProps) {
   const titleId = useId()
   const dialogRef = useRef<HTMLElement>(null)
 
@@ -42,17 +48,17 @@ export function Modal({ open, title, children, onClose, size = 'large' }: ModalP
   return createPortal(
     <div className="fixed inset-0 z-[100] flex items-center justify-center bg-[rgba(9,28,31,.62)] p-2 backdrop-blur-[3px] sm:p-4" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && onClose()}>
       <section
-        className={`flex h-[calc(100dvh-16px)] w-[calc(100vw-16px)] flex-col overflow-hidden rounded-lg border border-white/60 bg-white shadow-[0_28px_90px_rgba(8,24,27,.35)] sm:max-h-[calc(100dvh-32px)] sm:max-w-[calc(100vw-32px)] ${sizeClasses[size]}`}
+        className={`flex max-h-[calc(100dvh-16px)] w-[calc(100vw-16px)] flex-col overflow-hidden rounded-2xl border border-white/70 bg-white shadow-[0_28px_90px_rgba(8,24,27,.38)] sm:max-h-[calc(100dvh-32px)] sm:max-w-[calc(100vw-32px)] ${sizeClasses[size]}`}
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
         ref={dialogRef}
       >
-        <header className="flex h-16 shrink-0 items-center justify-between border-b border-[#e2e7e3] bg-white px-5 sm:h-[72px] sm:px-6">
-          <h2 className="m-0 truncate font-display text-[22px] font-medium text-[#183137] sm:text-[25px]" id={titleId}>{title}</h2>
-          <button className="grid size-9 shrink-0 cursor-pointer place-items-center rounded-lg border border-[#dce3df] bg-[#f2f5f3] text-[#5f706d] transition-colors hover:bg-[#e5ebe7] hover:text-[#23464b]" type="button" onClick={onClose} aria-label="Close modal"><X className="size-[18px]" aria-hidden /></button>
+        <header className="flex min-h-16 shrink-0 items-center justify-between gap-4 border-b border-[#193a3f] bg-[#23464b] px-5 py-4 shadow-[0_8px_24px_rgba(18,48,52,.22)] sm:min-h-[76px] sm:px-6">
+          <div className="min-w-0"><h2 className="m-0 truncate font-display text-[22px] font-bold text-white sm:text-[24px]" id={titleId}>{title}</h2>{description && <p className="m-0 mt-1 text-xs text-white/70 sm:text-[13px]">{description}</p>}</div>
+          <button className="grid size-9 shrink-0 cursor-pointer place-items-center rounded-lg border border-white/20 bg-white/5 text-white/85 transition-colors hover:bg-white/15 hover:text-white" type="button" onClick={onClose} aria-label="Close modal"><X className="size-[19px]" aria-hidden /></button>
         </header>
-        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 py-5 sm:px-6 sm:py-6" data-modal-body>
+        <div className="min-h-0 overflow-y-auto overscroll-contain bg-[linear-gradient(145deg,#dff1eb_0%,#eef7f2_42%,#f8efd9_100%)] px-5 py-5 sm:px-6 sm:py-6" data-modal-body>
           {children}
         </div>
       </section>

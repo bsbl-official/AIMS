@@ -42,7 +42,7 @@ public class BranchService {
 
     @Transactional(readOnly = true)
     public List<BranchResponse> branches(UUID companyId, UUID actorId) {
-        access.requireCompanyPermission(actorId, companyId, "branches.read", "branches.manage");
+        access.requireCompanyPermission(actorId, companyId, "branches.read", "branches.manage", "initial_data.read", "initial_data.manage");
         return jdbc.query("""
                 SELECT %s
                 FROM branches branch
@@ -54,7 +54,7 @@ public class BranchService {
 
     @Transactional(readOnly = true)
     public BranchResponse branch(UUID companyId, UUID branchId, UUID actorId) {
-        access.requireCompanyPermission(actorId, companyId, "branches.read", "branches.manage");
+        access.requireCompanyPermission(actorId, companyId, "branches.read", "branches.manage", "initial_data.read", "initial_data.manage");
         return response(find(companyId, branchId));
     }
 

@@ -28,7 +28,7 @@ public class FinancialYearService {
 
     @Transactional(readOnly = true)
     public List<FinancialPeriodResponse> periods(UUID companyId, UUID actorId) {
-        access.requireCompanyAdministrator(actorId, companyId);
+        access.requireCompanyPermission(actorId, companyId, "financial_years.read", "financial_years.manage", "initial_data.read", "initial_data.manage");
         return findAll(companyId);
     }
 

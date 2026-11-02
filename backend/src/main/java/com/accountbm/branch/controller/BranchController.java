@@ -30,13 +30,13 @@ public class BranchController {
     }
 
     @GetMapping
-    @PreAuthorize("hasAnyAuthority('permission:*', 'permission:branches.read', 'permission:branches.manage')")
+    @PreAuthorize("hasAnyAuthority('permission:*', 'permission:branches.read', 'permission:branches.manage', 'permission:initial_data.read', 'permission:initial_data.manage')")
     public List<BranchResponse> branches(@PathVariable UUID companyId, @AuthenticationPrincipal Jwt jwt) {
         return service.branches(companyId, actorId(jwt));
     }
 
     @GetMapping("/{branchId}")
-    @PreAuthorize("hasAnyAuthority('permission:*', 'permission:branches.read', 'permission:branches.manage')")
+    @PreAuthorize("hasAnyAuthority('permission:*', 'permission:branches.read', 'permission:branches.manage', 'permission:initial_data.read', 'permission:initial_data.manage')")
     public BranchResponse branch(
             @PathVariable UUID companyId,
             @PathVariable UUID branchId,

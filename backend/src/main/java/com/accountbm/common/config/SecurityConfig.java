@@ -10,12 +10,15 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
 import org.springframework.security.config.Customizer;
+import org.springframework.security.config.ObjectPostProcessor;
 import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.oauth2.server.resource.web.BearerTokenResolver;
 import org.springframework.security.web.csrf.CookieCsrfTokenRepository;
+import org.springframework.security.web.csrf.CsrfFilter;
+import org.springframework.security.web.authentication.session.NullAuthenticatedSessionStrategy;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationConverter;
@@ -42,7 +45,19 @@ public class SecurityConfig {
                 .secure(secureCookies)
                 .sameSite(sameSite));
         return http
-                .csrf(csrf -> csrf.csrfTokenRepository(csrfRepository))
+                .csrf(csrf -> csrf.csrfTokenRepository(csrfRepository)
+                        // JWT authentication runs on every request; it must not rotate the
+                        // CSRF cookie on every GET in this stateless application.
+                        .sessionAuthenticationStrategy(new NullAuthenticatedSessionStrategy())
+                        .withObjectPostProcessor(new ObjectPostProcessor<CsrfFilter>() {
+                            @Override
+                            public <O extends CsrfFilter> O postProcess(O filter) {
+                                // Resource-server defaults exempt bearer-token requests. Our tokens
+                                // are cookies, so unsafe requests must still require CSRF protection.
+                                filter.setRequireCsrfProtectionMatcher(CsrfFilter.DEFAULT_CSRF_MATCHER);
+                                return filter;
+                            }
+                        }))
                 .cors(Customizer.withDefaults())
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .exceptionHandling(errors -> errors

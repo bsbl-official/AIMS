@@ -57,7 +57,7 @@ public class CompanyService {
                         'companies.read', 'companies.manage', 'branches.read', 'branches.manage',
                         'project_codes.read', 'project_codes.manage', 'finance_codes.read', 'finance_codes.manage',
                         'component_codes.read', 'component_codes.manage',
-                        'financial_statements.read', 'financial_statements.manage'
+                        'financial_statements.read', 'financial_statements.manage', 'coa.read', 'coa.manage'
                     )
                   ORDER BY organization.legal_name
                   """.formatted(SELECT_COLUMNS);

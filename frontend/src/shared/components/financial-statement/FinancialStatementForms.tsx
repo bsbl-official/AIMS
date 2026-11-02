@@ -5,6 +5,7 @@ import type {
 import { useToast } from '../../../modules/toast/hooks/useToast'
 import { ApiError } from '../../api/httpClient'
 import { Button } from '../Button'
+import { ModalActions } from '../Modal'
 import { SearchableSelect } from '../SearchableSelect'
 import { SetupFormField, SetupInput } from '../forms/SetupFormField'
 
@@ -19,11 +20,11 @@ const FLAG_OPTIONS = [
   { value: 'N', label: 'No' },
 ]
 
-function Actions({ saving, onCancel, submitLabel = 'Create' }: { saving: boolean; onCancel: () => void; submitLabel?: string }) {
-  return <div className="flex justify-end gap-2.5 pt-2 md:col-span-2">
+function Actions({ saving, onCancel }: { saving: boolean; onCancel: () => void; submitLabel?: string }) {
+  return <ModalActions>
     <Button type="button" variant="secondary" onClick={onCancel}>Cancel</Button>
-    <Button type="submit" disabled={saving}>{saving ? 'Saving...' : submitLabel}</Button>
-  </div>
+    <Button type="submit" disabled={saving}>{saving ? 'Saving...' : 'Save'}</Button>
+  </ModalActions>
 }
 
 function useSubmit<T>(onSave: (values: T) => Promise<void>) {

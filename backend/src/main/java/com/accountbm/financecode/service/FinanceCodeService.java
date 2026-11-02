@@ -37,7 +37,7 @@ public class FinanceCodeService {
     @Transactional(readOnly = true)
     public List<FinanceCodeResponse> financeCodes(UUID companyId, Integer projectCodeId, UUID actorId) {
         access.requireCompanyPermission(actorId, companyId, "finance_codes.read", "finance_codes.manage",
-                "component_codes.read", "component_codes.manage");
+                "component_codes.read", "component_codes.manage", "initial_data.read", "initial_data.manage");
         var sql = new StringBuilder("SELECT " + SELECT + " FROM finance_codes finance JOIN project_codes project ON project.id = finance.project_code_id AND project.organization_id = finance.organization_id WHERE finance.organization_id = ?");
         var parameters = new ArrayList<Object>(); parameters.add(companyId);
         if (projectCodeId != null) { sql.append(" AND finance.project_code_id = ?"); parameters.add(projectCodeId); }
@@ -48,7 +48,7 @@ public class FinanceCodeService {
     @Transactional(readOnly = true)
     public FinanceCodeResponse financeCode(UUID companyId, Integer id, UUID actorId) {
         access.requireCompanyPermission(actorId, companyId, "finance_codes.read", "finance_codes.manage",
-                "component_codes.read", "component_codes.manage");
+                "component_codes.read", "component_codes.manage", "initial_data.read", "initial_data.manage");
         return response(find(companyId, id));
     }
 
@@ -83,6 +83,19 @@ public class FinanceCodeService {
         }
         audit(companyId, actorId, "FINANCE_CODE_UPDATED", id);
         return response(find(companyId, id));
+    }
+
+    @Transactional
+    public void delete(UUID companyId, Integer id, UUID actorId) {
+        access.requireCompanyPermission(actorId, companyId, "finance_codes.manage");
+        try {
+            var deleted = jdbc.update("DELETE FROM finance_codes WHERE organization_id = ? AND id = ?", companyId, id);
+            if (deleted == 0) throw notFound();
+        } catch (DataIntegrityViolationException exception) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "Finance code cannot be deleted while component codes reference it");
+        }
+        audit(companyId, actorId, "FINANCE_CODE_DELETED", id);
     }
 
     private void requireActiveProject(UUID companyId, Integer projectId) {

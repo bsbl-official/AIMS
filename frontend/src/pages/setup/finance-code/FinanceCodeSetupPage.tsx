@@ -1,25 +1,120 @@
-﻿import { Pencil } from 'lucide-react'
+import { Pencil, Trash2 } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { useAuth } from '../../../modules/auth/hooks/useAuth'; import { useToast } from '../../../modules/toast/hooks/useToast'
-import { companyApi } from '../../../modules/company/api/company.api'; import type { Company } from '../../../modules/company/company.types'
-import { projectCodeApi } from '../../../modules/project-code/api/project-code.api'; import type { ProjectCode } from '../../../modules/project-code/project-code.types'
-import { ApiError } from '../../../shared/api/httpClient'; import { Button } from '../../../shared/components/Button'; import { Card } from '../../../shared/components/Card'; import { DataTable, type Column } from '../../../shared/components/DataTable'; import { Modal } from '../../../shared/components/Modal'; import { PageContainer } from '../../../shared/components/PageContainer'; import { SearchableSelect } from '../../../shared/components/SearchableSelect'; import { SkeletonBoundary, TableSkeleton } from '../../../shared/components/Skeleton'; import { StatusBadge } from '../../../shared/components/StatusBadge'; import { TableActionButton } from '../../../shared/components/TableActionButton'; import { CompanyCodeSelector } from '../../../shared/components/codes/CompanyCodeSelector'; import { FinanceCodeForm } from '../../../shared/components/codes/FinanceCodeForm'
-import { financeCodeApi } from '../../../modules/finance-code/api/finance-code.api'; import type { FinanceCode, FinanceCodeFormValues } from '../../../modules/finance-code/finance-code.types'
+import { Plus as PlusIcon } from 'lucide-react'
+import { useAuth } from '../../../modules/auth/hooks/useAuth'
+import { useToast } from '../../../modules/toast/hooks/useToast'
+import { companyApi } from '../../../modules/company/api/company.api'
+import type { Company } from '../../../modules/company/company.types'
+import { projectCodeApi } from '../../../modules/project-code/api/project-code.api'
+import type { ProjectCode } from '../../../modules/project-code/project-code.types'
+import { financeCodeApi } from '../../../modules/finance-code/api/finance-code.api'
+import type { FinanceCode, FinanceCodeFormValues } from '../../../modules/finance-code/finance-code.types'
+import { ApiError } from '../../../shared/api/httpClient'
+import { Button } from '../../../shared/components/Button'
+import { Card } from '../../../shared/components/Card'
+import { DataTable, type Column } from '../../../shared/components/DataTable'
+import { Modal, ModalActions } from '../../../shared/components/Modal'
+import { PageContainer } from '../../../shared/components/PageContainer'
+import { SearchableSelect } from '../../../shared/components/SearchableSelect'
+import { SkeletonBoundary, TableSkeleton } from '../../../shared/components/Skeleton'
+import { StatusBadge } from '../../../shared/components/StatusBadge'
+import { TableActionButton } from '../../../shared/components/TableActionButton'
+import { CompanyCodeSelector } from '../../../shared/components/codes/CompanyCodeSelector'
+import { FinanceCodeForm } from '../../../shared/components/codes/FinanceCodeForm'
+import { formatCode } from '../../../shared/utils/formatCode'
 
 export function FinanceCodeSetupPage() {
-  const { can, user } = useAuth(); const toast = useToast(); const [companies, setCompanies] = useState<Company[]>([]); const [companyId, setCompanyId] = useState(''); const [projects, setProjects] = useState<ProjectCode[]>([]); const [projectId, setProjectId] = useState(''); const [items, setItems] = useState<FinanceCode[]>([]); const [editing, setEditing] = useState<FinanceCode | null | undefined>(undefined); const [loading, setLoading] = useState(true)
-  const canView = can('finance_codes.read') || can('finance_codes.manage'); const canEdit = can('finance_codes.manage')
-  const load = useCallback(async (id: string) => { if (!id) { setLoading(false); return } setLoading(true); try { const [nextProjects, nextItems] = await Promise.all([projectCodeApi.list(id), financeCodeApi.list(id)]); setProjects(nextProjects); setItems(nextItems); setProjectId('') } catch (reason) { toast.error(reason instanceof ApiError ? reason.message : 'Unable to load finance codes.', 'Finance codes unavailable') } finally { setLoading(false) } }, [toast])
-  useEffect(() => { if (!canView) { setLoading(false); return } void (async () => { try { const next = await companyApi.companies(); setCompanies(next); const assigned = user?.organizations[0]?.organizationId; const id = !user?.superAdmin && assigned ? assigned : (next[0]?.id ?? ''); setCompanyId(id); await load(id) } catch (reason) { toast.error(reason instanceof ApiError ? reason.message : 'Unable to load companies.', 'Company data unavailable'); setLoading(false) } })() }, [canView, load, toast, user])
+  const { can, user } = useAuth()
+  const toast = useToast()
+  const [companies, setCompanies] = useState<Company[]>([])
+  const [companyId, setCompanyId] = useState('')
+  const [projects, setProjects] = useState<ProjectCode[]>([])
+  const [projectId, setProjectId] = useState('')
+  const [items, setItems] = useState<FinanceCode[]>([])
+  const [editing, setEditing] = useState<FinanceCode | null | undefined>(undefined)
+  const [deleting, setDeleting] = useState<FinanceCode | null>(null)
+  const [deleteBusy, setDeleteBusy] = useState(false)
+  const [loading, setLoading] = useState(true)
+  const canView = can('finance_codes.read') || can('finance_codes.manage')
+  const canEdit = can('finance_codes.manage')
+
+  const load = useCallback(async (id: string) => {
+    if (!id) { setLoading(false); return }
+    setLoading(true)
+    try {
+      const [nextProjects, nextItems] = await Promise.all([projectCodeApi.list(id), financeCodeApi.list(id)])
+      setProjects(nextProjects)
+      setItems(nextItems)
+      setProjectId('')
+    } catch (reason) {
+      toast.error(reason instanceof ApiError ? reason.message : 'Unable to load finance codes.', 'Finance codes unavailable')
+    } finally {
+      setLoading(false)
+    }
+  }, [toast])
+
+  useEffect(() => {
+    if (!canView) { setLoading(false); return }
+    void (async () => {
+      try {
+        const next = await companyApi.companies()
+        setCompanies(next)
+        const assigned = user?.organizations[0]?.organizationId
+        const id = !user?.superAdmin && assigned ? assigned : (next[0]?.id ?? '')
+        setCompanyId(id)
+        await load(id)
+      } catch (reason) {
+        toast.error(reason instanceof ApiError ? reason.message : 'Unable to load companies.', 'Company data unavailable')
+        setLoading(false)
+      }
+    })()
+  }, [canView, load, toast, user])
+
   const visible = useMemo(() => projectId ? items.filter((item) => String(item.projectCodeId) === projectId) : items, [items, projectId])
-  const columns = useMemo<Column<FinanceCode>[]>(() => [{ key: 'project', header: 'Project', render: (item) => <div>{item.projectName}<small className="block text-[#7c8b88]">{item.projectCode}</small></div> }, { key: 'code', header: 'Finance code', render: (item) => <strong>{item.code}</strong> }, { key: 'name', header: 'Finance name', render: (item) => item.name }, { key: 'status', header: 'Status', render: (item) => <StatusBadge label={item.status} tone={item.status === 'ACTIVE' ? 'success' : 'neutral'} /> }, ...(canEdit ? [{ key: 'edit', header: 'Edit', headerGroup: 'Action', align: 'center' as const, render: (item: FinanceCode) => <TableActionButton label={`Edit ${item.name}`} onClick={() => setEditing(item)}><Pencil className="size-4" aria-hidden /></TableActionButton> }] : [])], [canEdit])
-  const save = async (values: FinanceCodeFormValues) => { const updating = Boolean(editing); if (editing) await financeCodeApi.update(editing, values); else await financeCodeApi.create(companyId, values); setEditing(undefined); toast.success(updating ? 'Finance code updated.' : 'Finance code created.', updating ? 'Updated' : 'Created'); await load(companyId) }
+  const columns = useMemo<Column<FinanceCode>[]>(() => [
+    { key: 'project', header: 'Project', render: (item) => <div>{item.projectName}<small className="block text-[#7c8b88]">{formatCode(item.projectCode)}</small></div> },
+    { key: 'code', header: 'Finance code', render: (item) => <strong>{formatCode(item.code)}</strong> },
+    { key: 'name', header: 'Finance name', render: (item) => item.name },
+    { key: 'status', header: 'Status', render: (item) => <StatusBadge label={item.status} tone={item.status === 'ACTIVE' ? 'success' : 'neutral'} /> },
+    ...(canEdit ? [
+      { key: 'edit', header: 'Edit', headerGroup: 'Action', align: 'center' as const, render: (item: FinanceCode) => <TableActionButton label={`Edit ${item.name}`} onClick={() => setEditing(item)}><Pencil className="size-4" aria-hidden /></TableActionButton> },
+      { key: 'delete', header: 'Delete', headerGroup: 'Action', align: 'center' as const, render: (item: FinanceCode) => <TableActionButton label={`Delete ${item.name}`} tone="danger" onClick={() => setDeleting(item)}><Trash2 className="size-4" aria-hidden /></TableActionButton> },
+    ] : []),
+  ], [canEdit])
+
+  async function save(values: FinanceCodeFormValues) {
+    const updating = Boolean(editing)
+    if (editing) await financeCodeApi.update(editing, values)
+    else await financeCodeApi.create(companyId, values)
+    setEditing(undefined)
+    toast.success(updating ? 'Finance code updated.' : 'Finance code created.', updating ? 'Updated' : 'Created')
+    await load(companyId)
+  }
+
+  async function remove() {
+    if (!deleting) return
+    setDeleteBusy(true)
+    try {
+      await financeCodeApi.remove(deleting)
+      setDeleting(null)
+      toast.success('Finance code deleted.', 'Deleted')
+      await load(companyId)
+    } catch (reason) {
+      toast.error(reason instanceof ApiError ? reason.message : 'Unable to delete the finance code.', 'Finance code was not deleted')
+    } finally {
+      setDeleteBusy(false)
+    }
+  }
+
   const crumbs = [{ label: 'Dashboard', to: '/' }, { label: 'Setup' }, { label: 'Finance setup' }]
   if (!canView) return <PageContainer breadcrumbs={crumbs} title="Access denied"><Card>You do not have access to finance code setup.</Card></PageContainer>
-  return <PageContainer breadcrumbs={crumbs} title="Finance setup" action={canEdit && projects.some((item) => item.status === 'ACTIVE') ? <Button onClick={() => setEditing(null)}>Add finance code</Button> : undefined}>
-    <div className="mb-4 flex flex-wrap justify-end gap-3"><CompanyCodeSelector companies={companies.map((item) => ({ id: item.id, code: item.code, name: item.legalName }))} value={companyId} disabled={!user?.superAdmin} onChange={(id) => { setCompanyId(id); void load(id) }} /><div className="w-[280px] max-sm:w-full"><SearchableSelect ariaLabel="Filter by project" value={projectId} options={[{ value: '', label: 'All projects' }, ...projects.map((item) => ({ value: String(item.id), label: item.name, description: String(item.code) }))]} onChange={setProjectId} searchPlaceholder="Search projects..." /></div></div>
-    <Card><SkeletonBoundary loading={loading} fallback={<TableSkeleton columns={5} rows={5} />} minimumDurationMs={500}><DataTable columns={columns} rows={visible} rowKey={(item) => item.id} emptyMessage="No finance codes are configured." /></SkeletonBoundary></Card>
-    <Modal open={editing !== undefined} title={editing ? 'Edit finance code' : 'Create finance code'} onClose={() => setEditing(undefined)}><FinanceCodeForm item={editing ?? undefined} projects={projects} defaultProjectId={projectId || String(projects.find((item) => item.status === 'ACTIVE')?.id ?? '')} onSave={save} onCancel={() => setEditing(undefined)} /></Modal>
+  const hasActiveProject = projects.some((item) => item.status === 'ACTIVE')
+  return <PageContainer breadcrumbs={crumbs} title="Finance setup" action={canEdit ? <Button disabled={!hasActiveProject} title={hasActiveProject ? 'Add New' : 'Create an active project first'} onClick={() => setEditing(null)}><span className="inline-flex items-center gap-2"><PlusIcon className="size-4" aria-hidden />Add New</span></Button> : undefined}>
+    <div className="mb-4 flex flex-wrap justify-end gap-3"><CompanyCodeSelector companies={companies.map((item) => ({ id: item.id, code: item.code, name: item.legalName }))} value={companyId} disabled={!user?.superAdmin} onChange={(id) => { setCompanyId(id); void load(id) }} /><div className="w-[280px] max-sm:w-full"><SearchableSelect ariaLabel="Filter by project" value={projectId} options={[{ value: '', label: 'All projects' }, ...projects.map((item) => ({ value: String(item.id), label: item.name, description: formatCode(item.code) }))]} onChange={setProjectId} searchPlaceholder="Search projects..." /></div></div>
+    <Card><SkeletonBoundary loading={loading} fallback={<TableSkeleton columns={6} rows={5} />} minimumDurationMs={500}><DataTable columns={columns} rows={visible} rowKey={(item) => item.id} emptyMessage="No finance codes are configured." /></SkeletonBoundary></Card>
+    <Modal open={editing !== undefined} title={editing ? 'Edit Finance' : 'Create New Finance'} onClose={() => setEditing(undefined)}><FinanceCodeForm item={editing ?? undefined} projects={projects} defaultProjectId={projectId || String(projects.find((item) => item.status === 'ACTIVE')?.id ?? '')} onSave={save} onCancel={() => setEditing(undefined)} /></Modal>
+    <Modal open={deleting !== null} title="Delete finance code" onClose={() => { if (!deleteBusy) setDeleting(null) }} size="medium">
+      {deleting && <div className="grid gap-5"><p className="m-0 text-sm leading-6 text-[#405653]">Delete finance code <strong>{formatCode(deleting.code)} - {deleting.name}</strong>? It cannot be deleted while component codes reference it.</p><ModalActions><Button variant="secondary" disabled={deleteBusy} onClick={() => setDeleting(null)}>Cancel</Button><Button variant="danger" disabled={deleteBusy} onClick={() => void remove()}>{deleteBusy ? 'Deleting...' : 'Delete finance code'}</Button></ModalActions></div>}
+    </Modal>
   </PageContainer>
 }
-

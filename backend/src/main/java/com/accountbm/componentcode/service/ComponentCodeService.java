@@ -37,7 +37,7 @@ public class ComponentCodeService {
 
     @Transactional(readOnly = true)
     public List<ComponentCodeResponse> componentCodes(UUID companyId, Integer projectCodeId, Integer financeCodeId, UUID actorId) {
-        access.requireCompanyPermission(actorId, companyId, "component_codes.read", "component_codes.manage");
+        access.requireCompanyPermission(actorId, companyId, "component_codes.read", "component_codes.manage", "initial_data.read", "initial_data.manage");
         var sql = new StringBuilder("SELECT " + SELECT + " FROM component_codes component JOIN project_codes project ON project.id = component.project_code_id AND project.organization_id = component.organization_id JOIN finance_codes finance ON finance.id = component.finance_code_id AND finance.project_code_id = component.project_code_id AND finance.organization_id = component.organization_id WHERE component.organization_id = ?");
         var parameters = new ArrayList<Object>(); parameters.add(companyId);
         if (projectCodeId != null) { sql.append(" AND component.project_code_id = ?"); parameters.add(projectCodeId); }
@@ -48,7 +48,7 @@ public class ComponentCodeService {
 
     @Transactional(readOnly = true)
     public ComponentCodeResponse componentCode(UUID companyId, Integer id, UUID actorId) {
-        access.requireCompanyPermission(actorId, companyId, "component_codes.read", "component_codes.manage");
+        access.requireCompanyPermission(actorId, companyId, "component_codes.read", "component_codes.manage", "initial_data.read", "initial_data.manage");
         return response(find(companyId, id));
     }
 
@@ -84,6 +84,19 @@ public class ComponentCodeService {
         }
         audit(companyId, actorId, "COMPONENT_CODE_UPDATED", id);
         return response(find(companyId, id));
+    }
+
+    @Transactional
+    public void delete(UUID companyId, Integer id, UUID actorId) {
+        access.requireCompanyPermission(actorId, companyId, "component_codes.manage");
+        try {
+            var deleted = jdbc.update("DELETE FROM component_codes WHERE organization_id = ? AND id = ?", companyId, id);
+            if (deleted == 0) throw notFound();
+        } catch (DataIntegrityViolationException exception) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "Component code cannot be deleted because it is already in use");
+        }
+        audit(companyId, actorId, "COMPONENT_CODE_DELETED", id);
     }
 
     private void requireActiveHierarchy(UUID companyId, Integer projectId, Integer financeId) {

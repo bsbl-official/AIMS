@@ -27,7 +27,7 @@ public class FinancialYearController {
     }
 
     @GetMapping
-    @PreAuthorize("hasAnyAuthority('permission:*', 'permission:financial_years.read', 'permission:financial_years.manage')")
+    @PreAuthorize("hasAnyAuthority('permission:*', 'permission:financial_years.read', 'permission:financial_years.manage', 'permission:initial_data.read', 'permission:initial_data.manage')")
     public List<FinancialPeriodResponse> periods(
             @PathVariable UUID companyId,
             @AuthenticationPrincipal Jwt jwt) {

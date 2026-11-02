@@ -1,6 +1,6 @@
 package com.accountbm.coa.service;
 
-import static com.accountbm.coa.dto.ChartOfAccountDtos.*;
+import static com.accountbm.coa.dto.InitialCoaDtos.*;
 
 import java.sql.ResultSet;
 import java.sql.SQLException;
@@ -10,7 +10,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.UUID;
 
-import com.accountbm.coa.model.ChartOfAccount;
+import com.accountbm.coa.model.InitialCoa;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -19,25 +19,25 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
 @Service
-public class ChartOfAccountService {
+public class InitialCoaService {
     private final JdbcTemplate jdbc;
 
-    public ChartOfAccountService(JdbcTemplate jdbc) {
+    public InitialCoaService(JdbcTemplate jdbc) {
         this.jdbc = jdbc;
     }
 
     @Transactional(readOnly = true)
-    public List<ChartOfAccountResponse> chartOfAccounts() {
+    public List<InitialCoaResponse> initialCoas() {
         return jdbc.query("SELECT * FROM a_coa ORDER BY coa_id", (rs, rowNum) -> response(map(rs)));
     }
 
     @Transactional(readOnly = true)
-    public ChartOfAccountResponse chartOfAccount(Long coaId) {
+    public InitialCoaResponse initialCoa(Long coaId) {
         return response(find(coaId));
     }
 
     @Transactional
-    public ChartOfAccountResponse create(CreateChartOfAccountRequest request, UUID actorId) {
+    public InitialCoaResponse create(CreateInitialCoaRequest request, UUID actorId) {
         var coaId = request.coaId();
         try {
             jdbc.update("""
@@ -45,13 +45,13 @@ public class ChartOfAccountService {
                     VALUES (?, ?, ?, clock_timestamp(), ?)
                     """, coaId, request.description().strip(), actorId.toString(), flag(request.deviceFlag()));
         } catch (DataIntegrityViolationException exception) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT, "A COA entry with this ID already exists");
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "An Initial COA entry with this ID already exists");
         }
         return response(find(coaId));
     }
 
     @Transactional
-    public ChartOfAccountResponse update(Long coaId, UpdateChartOfAccountRequest request, UUID actorId) {
+    public InitialCoaResponse update(Long coaId, UpdateInitialCoaRequest request, UUID actorId) {
         var updated = jdbc.update("""
                 UPDATE a_coa
                 SET coa_desc = ?, device_flage = ?, upd_user = ?, upd_date = clock_timestamp()
@@ -61,21 +61,21 @@ public class ChartOfAccountService {
         return response(find(coaId));
     }
 
-    private ChartOfAccount find(Long coaId) {
+    private InitialCoa find(Long coaId) {
         var rows = jdbc.query("SELECT * FROM a_coa WHERE coa_id = ?", (rs, rowNum) -> map(rs), coaId);
         if (rows.isEmpty()) throw notFound();
         return rows.getFirst();
     }
 
-    private static ChartOfAccount map(ResultSet rs) throws SQLException {
-        return new ChartOfAccount(
+    private static InitialCoa map(ResultSet rs) throws SQLException {
+        return new InitialCoa(
                 rs.getLong("coa_id"), rs.getString("coa_desc"), rs.getString("ins_user"),
                 instant(rs.getTimestamp("ins_date")), rs.getString("upd_user"),
                 instant(rs.getTimestamp("upd_date")), rs.getString("device_flage"));
     }
 
-    private static ChartOfAccountResponse response(ChartOfAccount item) {
-        return new ChartOfAccountResponse(item.coaId(), item.description(), item.insertedBy(), item.insertedAt(),
+    private static InitialCoaResponse response(InitialCoa item) {
+        return new InitialCoaResponse(item.coaId(), item.description(), item.insertedBy(), item.insertedAt(),
                 item.updatedBy(), item.updatedAt(), item.deviceFlag());
     }
 
@@ -88,6 +88,6 @@ public class ChartOfAccountService {
     }
 
     private static ResponseStatusException notFound() {
-        return new ResponseStatusException(HttpStatus.NOT_FOUND, "COA entry was not found");
+        return new ResponseStatusException(HttpStatus.NOT_FOUND, "Initial COA entry was not found");
     }
 }

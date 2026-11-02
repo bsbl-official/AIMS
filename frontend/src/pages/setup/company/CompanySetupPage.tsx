@@ -6,7 +6,7 @@ import { ApiError } from '../../../shared/api/httpClient'
 import { Button } from '../../../shared/components/Button'
 import { Card } from '../../../shared/components/Card'
 import { DataTable, type Column } from '../../../shared/components/DataTable'
-import { Modal } from '../../../shared/components/Modal'
+import { Modal, ModalActions } from '../../../shared/components/Modal'
 import { PageContainer } from '../../../shared/components/PageContainer'
 import { SkeletonBoundary, TableSkeleton } from '../../../shared/components/Skeleton'
 import { StatusBadge } from '../../../shared/components/StatusBadge'
@@ -77,14 +77,14 @@ export function CompanySetupPage() {
     }
   }
 
-  return <PageContainer breadcrumbs={[{ label: 'Dashboard', to: '/' }, { label: 'Setup' }, { label: 'Company setup' }]} title="Company setup" action={user?.superAdmin ? <Button onClick={() => setEditing(null)}><span className="inline-flex items-center gap-2"><Plus className="size-4" aria-hidden />Add company</span></Button> : undefined}>
+  return <PageContainer breadcrumbs={[{ label: 'Dashboard', to: '/' }, { label: 'Setup' }, { label: 'Company setup' }]} title="Company setup" action={user?.superAdmin ? <Button onClick={() => setEditing(null)}><span className="inline-flex items-center gap-2"><Plus className="size-4" aria-hidden />Add New</span></Button> : undefined}>
     <Card className="overflow-x-auto">
       <SkeletonBoundary loading={loading} fallback={<TableSkeleton columns={5} rows={5} />} minimumDurationMs={500}>
         <DataTable columns={columns} rows={companies} rowKey={(company) => company.id} emptyMessage="No companies are configured." />
       </SkeletonBoundary>
     </Card>
 
-    <Modal open={editing !== undefined} title={editing ? 'Edit company' : 'Create company'} onClose={() => setEditing(undefined)}>
+    <Modal open={editing !== undefined} title={editing ? 'Edit Company' : 'Create New Company'} onClose={() => setEditing(undefined)}>
       <CompanyForm company={editing ?? undefined} onSave={save} onCancel={() => setEditing(undefined)} />
     </Modal>
 
@@ -95,7 +95,7 @@ export function CompanySetupPage() {
     <Modal open={deleting !== null} title="Delete company" onClose={() => { if (!deleteBusy) setDeleting(null) }} size="medium">
       {deleting && <div className="grid gap-6">
         <p className="text-sm leading-6 text-[#405653]">Delete <span className="text-[#203236]">{deleting.legalName}</span> and its setup records? A company containing accounting data cannot be deleted.</p>
-        <div className="flex justify-end gap-2.5"><Button type="button" variant="secondary" disabled={deleteBusy} onClick={() => setDeleting(null)}>Cancel</Button><Button type="button" variant="danger" disabled={deleteBusy} onClick={() => void removeCompany()}>{deleteBusy ? 'Deleting...' : 'Delete company'}</Button></div>
+        <ModalActions><Button type="button" variant="secondary" disabled={deleteBusy} onClick={() => setDeleting(null)}>Cancel</Button><Button type="button" variant="danger" disabled={deleteBusy} onClick={() => void removeCompany()}>{deleteBusy ? 'Deleting...' : 'Delete company'}</Button></ModalActions>
       </div>}
     </Modal>
   </PageContainer>

@@ -33,7 +33,8 @@ public class ProjectCodeService {
     @Transactional(readOnly = true)
     public List<ProjectCodeResponse> projectCodes(UUID companyId, UUID actorId) {
         access.requireCompanyPermission(actorId, companyId, "project_codes.read", "project_codes.manage",
-                "finance_codes.read", "finance_codes.manage", "component_codes.read", "component_codes.manage");
+                "finance_codes.read", "finance_codes.manage", "component_codes.read", "component_codes.manage",
+                "initial_data.read", "initial_data.manage");
         return jdbc.query("SELECT * FROM project_codes WHERE organization_id = ? ORDER BY id",
                 (rs, rowNum) -> response(map(rs)), companyId);
     }
@@ -41,7 +42,8 @@ public class ProjectCodeService {
     @Transactional(readOnly = true)
     public ProjectCodeResponse projectCode(UUID companyId, Integer id, UUID actorId) {
         access.requireCompanyPermission(actorId, companyId, "project_codes.read", "project_codes.manage",
-                "finance_codes.read", "finance_codes.manage", "component_codes.read", "component_codes.manage");
+                "finance_codes.read", "finance_codes.manage", "component_codes.read", "component_codes.manage",
+                "initial_data.read", "initial_data.manage");
         return response(find(companyId, id));
     }
 

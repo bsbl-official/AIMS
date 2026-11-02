@@ -1,6 +1,10 @@
+import { formatCode } from '../../shared/utils/formatCode'
+
 export type DeviceFlag = 'Y' | 'N'
 
-export type ChartOfAccount = {
+export const formatInitialCoaId = (coaId: string | number) => formatCode(coaId)
+
+export type InitialCoa = {
   coaId: number
   description: string
   insertedBy: string
@@ -10,7 +14,7 @@ export type ChartOfAccount = {
   deviceFlag: DeviceFlag
 }
 
-export type ChartOfAccountFormValues = {
+export type InitialCoaFormValues = {
   coaId: string
   description: string
   deviceFlag: DeviceFlag

@@ -11,4 +11,5 @@ export const componentCodeApi = {
   get: (companyId: string, id: number) => request<ComponentCode>(`/companies/${companyId}/component-codes/${id}`),
   create: (companyId: string, values: ComponentCodeFormValues) => request<ComponentCode>(`/companies/${companyId}/component-codes`, { method: 'POST', body: JSON.stringify({ projectCodeId: Number(values.projectCodeId), financeCodeId: Number(values.financeCodeId), code: Number(values.code), name: values.name, description: values.description }) }),
   update: (item: ComponentCode, values: ComponentCodeFormValues) => request<ComponentCode>(`/companies/${item.companyId}/component-codes/${item.id}`, { method: 'PUT', body: JSON.stringify({ projectCodeId: Number(values.projectCodeId), financeCodeId: Number(values.financeCodeId), name: values.name, description: values.description, status: values.status, version: item.version }) }),
+  remove: (item: ComponentCode) => request<void>(`/companies/${item.companyId}/component-codes/${item.id}`, { method: 'DELETE' }),
 }

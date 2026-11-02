@@ -1,6 +1,7 @@
 import { useState, type FormEvent, type KeyboardEvent } from 'react'
 import { ApiError } from '../../api/httpClient'
 import { Button } from '../Button'
+import { ModalActions } from '../Modal'
 import { useToast } from '../../../modules/toast/hooks/useToast'
 import type { Company, CompanyFormValues, CompanyStatus } from '../../../modules/company/company.types'
 import { SetupFormField, SetupInput } from '../forms/SetupFormField'
@@ -90,6 +91,6 @@ export function CompanyForm({ company, onSave, onCancel }: CompanyFormProps) {
     <SetupFormField label="Email"><SetupInput type="email" value={values.email} onChange={(event) => set('email', event.target.value)} maxLength={320} /></SetupFormField>
     <SetupFormField label="Phone"><SetupInput value={values.phone} onChange={(event) => set('phone', event.target.value)} maxLength={50} /></SetupFormField>
     <SetupFormField label="Website"><SetupInput type="url" value={values.website} onChange={(event) => set('website', event.target.value)} maxLength={255} placeholder="https://" /></SetupFormField>
-    <div className="flex justify-end gap-2.5 pt-2 md:col-span-2"><Button type="button" variant="secondary" onClick={onCancel}>Cancel</Button><Button type="submit" disabled={saving}>{saving ? 'Saving...' : company ? 'Save changes' : 'Create company'}</Button></div>
+      <ModalActions><Button type="button" variant="secondary" onClick={onCancel}>Cancel</Button><Button type="submit" disabled={saving}>{saving ? 'Saving...' : 'Save'}</Button></ModalActions>
   </form>
 }

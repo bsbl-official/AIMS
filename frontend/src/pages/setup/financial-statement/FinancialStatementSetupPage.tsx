@@ -25,7 +25,7 @@ import {
     ReportForm,
     SpecificationForm
 } from '../../../shared/components/financial-statement/FinancialStatementForms'
-import {Modal} from '../../../shared/components/Modal'
+import {Modal, ModalActions} from '../../../shared/components/Modal'
 import {PageContainer} from '../../../shared/components/PageContainer'
 import {SearchableSelect} from '../../../shared/components/SearchableSelect'
 import {SkeletonBoundary, TableSkeleton} from '../../../shared/components/Skeleton'
@@ -224,7 +224,7 @@ export function FinancialStatementSetupPage() {
         setLayerCode('')
         setModal(level)
     }
-    const modalTitle = `Create ${LEVEL_OPTIONS.find((item) => item.value === level)?.label ?? 'statement layer'}`
+    const modalTitle = `Create New ${LEVEL_OPTIONS.find((item) => item.value === level)?.label ?? 'Statement Layer'}`
     const crumbs = [{label: 'Dashboard', to: '/'}, {label: 'Setup'}, {label: 'Financial statement setup'}]
     if (!canView) return <PageContainer breadcrumbs={crumbs} title="Access denied"><Card>You do not have access to
         financial statement setup.</Card></PageContainer>
@@ -250,7 +250,7 @@ export function FinancialStatementSetupPage() {
             className="overflow-hidden rounded-2xl border border-[#bfd7ce] bg-[rgba(255,255,255,.72)] shadow-[0_14px_34px_rgba(39,73,68,.10)] backdrop-blur-sm">
             <div
                 className="flex flex-wrap items-center justify-between gap-3 border-b border-[#cfe0d9] bg-[linear-gradient(100deg,#dcefe8,#eef7f1_58%,#f5e7c5)] px-5 py-4">
-                <div><h2 className="m-0 text-base font-normal text-[#173d42]">{LEVEL_TITLES[level]}</h2><p
+                <div><h2 className="m-0 text-base font-bold text-[#173d42]">{LEVEL_TITLES[level]}</h2><p
                     className="mt-1 mb-0 text-xs text-[#617774]">All
                     existing {LEVEL_OPTIONS.find((item) => item.value === level)?.label.toLowerCase()} codes for this
                     company.</p></div>
@@ -300,19 +300,19 @@ export function FinancialStatementSetupPage() {
                         await afterCreate('Report layer created.')
                     }}/>}
                 {modal === 'group' && selectedReport &&
-                    <GroupForm parent={`${selectedReport.reportCode} — ${selectedReport.reportDescription}`}
+                    <GroupForm parent={`${formatId(selectedReport.reportCode, 2)} — ${selectedReport.reportDescription}`}
                                onCancel={() => setModal(null)} onSave={async (values: GroupFormValues) => {
                         await financialStatementApi.createGroup(companyId, reportCode, values);
                         await afterCreate('Group layer created.')
                     }}/>}
                 {modal === 'layer' && selectedGroup &&
-                    <LayerForm parent={`${selectedGroup.groupCode} — ${selectedGroup.groupDescription}`}
+                    <LayerForm parent={`${formatId(selectedGroup.groupCode, 3)} — ${selectedGroup.groupDescription}`}
                                onCancel={() => setModal(null)} onSave={async (values: LayerFormValues) => {
                         await financialStatementApi.createLayer(companyId, reportCode, groupCode, values);
                         await afterCreate('Statement sub head created.')
                     }}/>}
                 {modal === 'specification' && selectedLayer &&
-                    <SpecificationForm parent={`${selectedLayer.layerCode} — ${selectedLayer.layerDescription}`}
+                    <SpecificationForm parent={`${formatId(selectedLayer.layerCode, 3)} — ${selectedLayer.layerDescription}`}
                                        onCancel={() => setModal(null)}
                                        onSave={async (values: SpecificationFormValues) => {
                                            await financialStatementApi.createSpecification(companyId, reportCode, groupCode, layerCode, values);
@@ -384,12 +384,12 @@ export function FinancialStatementSetupPage() {
             {deleting && <div className="grid gap-6">
                 <p className="m-0 text-sm leading-6 text-[#405653]">Delete {itemLabel(deleting)}? Parent items with
                     dependent layers cannot be deleted until their child records are removed.</p>
-                <div className="flex justify-end gap-2.5">
+                <ModalActions>
                     <Button type="button" variant="secondary" disabled={deleteBusy}
                             onClick={() => setDeleting(null)}>Cancel</Button>
                     <Button type="button" variant="danger" disabled={deleteBusy}
                             onClick={() => void removeItem()}>{deleteBusy ? 'Deleting...' : 'Delete'}</Button>
-                </div>
+                </ModalActions>
             </div>}
         </Modal>
     </PageContainer>
@@ -526,7 +526,6 @@ function itemLabel(target: EditableItem) {
 }
 
 function formatId(value: string, width: number) {
-    void width
-    return value
+    return String(value).padStart(width, '0')
 }
 

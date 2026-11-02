@@ -21,14 +21,14 @@ public class FinanceCodeController {
     public FinanceCodeController(FinanceCodeService service) { this.service = service; }
 
     @GetMapping
-    @PreAuthorize("hasAnyAuthority('permission:*', 'permission:finance_codes.read', 'permission:finance_codes.manage', 'permission:component_codes.read', 'permission:component_codes.manage')")
+    @PreAuthorize("hasAnyAuthority('permission:*', 'permission:finance_codes.read', 'permission:finance_codes.manage', 'permission:component_codes.read', 'permission:component_codes.manage', 'permission:initial_data.read', 'permission:initial_data.manage')")
     public List<FinanceCodeResponse> financeCodes(@PathVariable UUID companyId,
             @RequestParam(required = false) Integer projectCodeId, @AuthenticationPrincipal Jwt jwt) {
         return service.financeCodes(companyId, projectCodeId, actorId(jwt));
     }
 
     @GetMapping("/{financeCodeId}")
-    @PreAuthorize("hasAnyAuthority('permission:*', 'permission:finance_codes.read', 'permission:finance_codes.manage', 'permission:component_codes.read', 'permission:component_codes.manage')")
+    @PreAuthorize("hasAnyAuthority('permission:*', 'permission:finance_codes.read', 'permission:finance_codes.manage', 'permission:component_codes.read', 'permission:component_codes.manage', 'permission:initial_data.read', 'permission:initial_data.manage')")
     public FinanceCodeResponse financeCode(@PathVariable UUID companyId, @PathVariable Integer financeCodeId,
             @AuthenticationPrincipal Jwt jwt) {
         return service.financeCode(companyId, financeCodeId, actorId(jwt));
@@ -47,6 +47,14 @@ public class FinanceCodeController {
     public FinanceCodeResponse update(@PathVariable UUID companyId, @PathVariable Integer financeCodeId,
             @Valid @RequestBody UpdateFinanceCodeRequest request, @AuthenticationPrincipal Jwt jwt) {
         return service.update(companyId, financeCodeId, request, actorId(jwt));
+    }
+
+    @DeleteMapping("/{financeCodeId}")
+    @PreAuthorize("hasAnyAuthority('permission:*', 'permission:finance_codes.manage')")
+    public ResponseEntity<Void> delete(@PathVariable UUID companyId, @PathVariable Integer financeCodeId,
+            @AuthenticationPrincipal Jwt jwt) {
+        service.delete(companyId, financeCodeId, actorId(jwt));
+        return ResponseEntity.noContent().build();
     }
 
     private static UUID actorId(Jwt jwt) { return UUID.fromString(jwt.getSubject()); }

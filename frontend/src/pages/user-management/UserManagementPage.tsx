@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Pencil } from 'lucide-react'
+import { Plus as PlusIcon } from 'lucide-react'
 import { useAuth } from '../../modules/auth/hooks/useAuth'
 import { ApiError } from '../../shared/api/httpClient'
 import { Button } from '../../shared/components/Button'
@@ -64,11 +65,11 @@ export function UserManagementPage({ view }: UserManagementPageProps) {
   return <PageContainer
     breadcrumbs={breadcrumbs}
     title={pageLabel}
-    action={view === 'users' && can('users.manage') ? <Button onClick={() => setEditingUser(null)}>Add user</Button> : view === 'roles' && can('roles.manage') ? <Button onClick={() => setEditingRole(null)}>Add role</Button> : undefined}
+      action={view === 'users' && can('users.manage') ? <Button onClick={() => setEditingUser(null)}><span className="inline-flex items-center gap-2"><PlusIcon className="size-4" aria-hidden />Add New</span></Button> : view === 'roles' && can('roles.manage') ? <Button onClick={() => setEditingRole(null)}><span className="inline-flex items-center gap-2"><PlusIcon className="size-4" aria-hidden />Add New</span></Button> : undefined}
   >
     <div className="mb-4 flex justify-end"><div className="grid grid-cols-[auto_280px] items-center gap-x-3 gap-y-1 text-[13px] font-medium text-[#405653] max-sm:w-full max-sm:grid-cols-1"><span>Company</span><SearchableSelect ariaLabel="Company" disabled={!currentUser?.superAdmin} value={organizationId} options={organizations.map((organization) => ({ value: organization.id, label: organization.name, description: String(organization.code) }))} onChange={(value) => { setOrganizationId(value); void loadOrganization(value) }} placeholder="Select a company" searchPlaceholder="Search companies..." emptyMessage="No companies found." />{!currentUser?.superAdmin && <span className="col-start-2 text-[11px] font-normal text-[#7c8b88] max-sm:col-start-1">Fixed for your account</span>}</div></div>
     <Card className="overflow-x-auto"><SkeletonBoundary loading={loading} fallback={<TableSkeleton columns={view === 'users' ? 6 : 4} rows={5} />} minimumDurationMs={500}>{view === 'users' ? <DataTable columns={userColumns} rows={users} rowKey={(user) => user.id} emptyMessage="No users belong to this company." /> : <DataTable columns={roleColumns} rows={roles} rowKey={(role) => role.id} emptyMessage="No roles are configured." />}</SkeletonBoundary></Card>
-    <Modal open={editingUser !== undefined} title={editingUser ? 'Edit user' : 'Create user'} onClose={() => setEditingUser(undefined)}>{organizationId && <UserForm organizationId={organizationId} roles={roles} branches={branches} user={editingUser ?? undefined} onSave={saveUser} onCancel={() => setEditingUser(undefined)} />}</Modal>
-    <Modal open={editingRole !== undefined} title={editingRole ? 'Edit role' : 'Create role'} onClose={() => setEditingRole(undefined)}>{organizationId && <RoleForm organizationId={organizationId} permissions={permissions} role={editingRole ?? undefined} onSave={saveRole} onCancel={() => setEditingRole(undefined)} />}</Modal>
+      <Modal open={editingUser !== undefined} title={editingUser ? 'Edit User' : 'Create New User'} onClose={() => setEditingUser(undefined)}>{organizationId && <UserForm organizationId={organizationId} roles={roles} branches={branches} user={editingUser ?? undefined} onSave={saveUser} onCancel={() => setEditingUser(undefined)} />}</Modal>
+      <Modal open={editingRole !== undefined} title={editingRole ? 'Edit Role' : 'Create New Role'} onClose={() => setEditingRole(undefined)}>{organizationId && <RoleForm organizationId={organizationId} permissions={permissions} role={editingRole ?? undefined} onSave={saveRole} onCancel={() => setEditingRole(undefined)} />}</Modal>
   </PageContainer>
 }

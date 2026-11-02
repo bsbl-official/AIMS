@@ -6,4 +6,5 @@ export const financeCodeApi = {
   get: (companyId: string, id: number) => request<FinanceCode>(`/companies/${companyId}/finance-codes/${id}`),
   create: (companyId: string, values: FinanceCodeFormValues) => request<FinanceCode>(`/companies/${companyId}/finance-codes`, { method: 'POST', body: JSON.stringify({ projectCodeId: Number(values.projectCodeId), code: Number(values.code), name: values.name, description: values.description }) }),
   update: (item: FinanceCode, values: FinanceCodeFormValues) => request<FinanceCode>(`/companies/${item.companyId}/finance-codes/${item.id}`, { method: 'PUT', body: JSON.stringify({ projectCodeId: Number(values.projectCodeId), name: values.name, description: values.description, status: values.status, version: item.version }) }),
+  remove: (item: FinanceCode) => request<void>(`/companies/${item.companyId}/finance-codes/${item.id}`, { method: 'DELETE' }),
 }

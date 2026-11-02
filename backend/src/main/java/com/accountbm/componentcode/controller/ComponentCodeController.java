@@ -21,7 +21,7 @@ public class ComponentCodeController {
     public ComponentCodeController(ComponentCodeService service) { this.service = service; }
 
     @GetMapping
-    @PreAuthorize("hasAnyAuthority('permission:*', 'permission:component_codes.read', 'permission:component_codes.manage')")
+    @PreAuthorize("hasAnyAuthority('permission:*', 'permission:component_codes.read', 'permission:component_codes.manage', 'permission:initial_data.read', 'permission:initial_data.manage')")
     public List<ComponentCodeResponse> componentCodes(@PathVariable UUID companyId,
             @RequestParam(required = false) Integer projectCodeId,
             @RequestParam(required = false) Integer financeCodeId,
@@ -30,7 +30,7 @@ public class ComponentCodeController {
     }
 
     @GetMapping("/{componentCodeId}")
-    @PreAuthorize("hasAnyAuthority('permission:*', 'permission:component_codes.read', 'permission:component_codes.manage')")
+    @PreAuthorize("hasAnyAuthority('permission:*', 'permission:component_codes.read', 'permission:component_codes.manage', 'permission:initial_data.read', 'permission:initial_data.manage')")
     public ComponentCodeResponse componentCode(@PathVariable UUID companyId, @PathVariable Integer componentCodeId,
             @AuthenticationPrincipal Jwt jwt) {
         return service.componentCode(companyId, componentCodeId, actorId(jwt));
@@ -49,6 +49,14 @@ public class ComponentCodeController {
     public ComponentCodeResponse update(@PathVariable UUID companyId, @PathVariable Integer componentCodeId,
             @Valid @RequestBody UpdateComponentCodeRequest request, @AuthenticationPrincipal Jwt jwt) {
         return service.update(companyId, componentCodeId, request, actorId(jwt));
+    }
+
+    @DeleteMapping("/{componentCodeId}")
+    @PreAuthorize("hasAnyAuthority('permission:*', 'permission:component_codes.manage')")
+    public ResponseEntity<Void> delete(@PathVariable UUID companyId, @PathVariable Integer componentCodeId,
+            @AuthenticationPrincipal Jwt jwt) {
+        service.delete(companyId, componentCodeId, actorId(jwt));
+        return ResponseEntity.noContent().build();
     }
 
     private static UUID actorId(Jwt jwt) { return UUID.fromString(jwt.getSubject()); }

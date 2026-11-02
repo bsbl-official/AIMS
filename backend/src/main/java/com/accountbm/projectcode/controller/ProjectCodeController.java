@@ -22,13 +22,13 @@ public class ProjectCodeController {
     public ProjectCodeController(ProjectCodeService service) { this.service = service; }
 
     @GetMapping
-    @PreAuthorize("hasAnyAuthority('permission:*', 'permission:project_codes.read', 'permission:project_codes.manage', 'permission:finance_codes.read', 'permission:finance_codes.manage', 'permission:component_codes.read', 'permission:component_codes.manage')")
+    @PreAuthorize("hasAnyAuthority('permission:*', 'permission:project_codes.read', 'permission:project_codes.manage', 'permission:finance_codes.read', 'permission:finance_codes.manage', 'permission:component_codes.read', 'permission:component_codes.manage', 'permission:initial_data.read', 'permission:initial_data.manage')")
     public List<ProjectCodeResponse> projectCodes(@PathVariable UUID companyId, @AuthenticationPrincipal Jwt jwt) {
         return service.projectCodes(companyId, actorId(jwt));
     }
 
     @GetMapping("/{projectCodeId}")
-    @PreAuthorize("hasAnyAuthority('permission:*', 'permission:project_codes.read', 'permission:project_codes.manage', 'permission:finance_codes.read', 'permission:finance_codes.manage', 'permission:component_codes.read', 'permission:component_codes.manage')")
+    @PreAuthorize("hasAnyAuthority('permission:*', 'permission:project_codes.read', 'permission:project_codes.manage', 'permission:finance_codes.read', 'permission:finance_codes.manage', 'permission:component_codes.read', 'permission:component_codes.manage', 'permission:initial_data.read', 'permission:initial_data.manage')")
     public ProjectCodeResponse projectCode(@PathVariable UUID companyId, @PathVariable Integer projectCodeId,
             @AuthenticationPrincipal Jwt jwt) {
         return service.projectCode(companyId, projectCodeId, actorId(jwt));

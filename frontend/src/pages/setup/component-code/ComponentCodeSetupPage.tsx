@@ -1,5 +1,6 @@
 ﻿import { Pencil } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import { Plus as PlusIcon } from 'lucide-react'
 import { useAuth } from '../../../modules/auth/hooks/useAuth'
 import { useToast } from '../../../modules/toast/hooks/useToast'
 import { companyApi } from '../../../modules/company/api/company.api'
@@ -22,6 +23,7 @@ import { CompanyCodeSelector } from '../../../shared/components/codes/CompanyCod
 import { ComponentCodeForm } from '../../../shared/components/codes/ComponentCodeForm'
 import { componentCodeApi } from '../../../modules/component-code/api/component-code.api'
 import type { ComponentCode, ComponentCodeFormValues } from '../../../modules/component-code/component-code.types'
+import { formatCode } from '../../../shared/utils/formatCode'
 
 export function ComponentCodeSetupPage() {
   const { can, user } = useAuth(); const toast = useToast()
@@ -35,9 +37,9 @@ export function ComponentCodeSetupPage() {
   const filteredFinances = useMemo(() => projectId ? finances.filter((item) => String(item.projectCodeId) === projectId) : finances, [finances, projectId])
   const visible = useMemo(() => items.filter((item) => (!projectId || String(item.projectCodeId) === projectId) && (!financeId || String(item.financeCodeId) === financeId)), [financeId, items, projectId])
   const columns = useMemo<Column<ComponentCode>[]>(() => [
-    { key: 'project', header: 'Project', render: (item) => <div>{item.projectName}<small className="block text-[#7c8b88]">{item.projectCode}</small></div> },
-    { key: 'finance', header: 'Finance', render: (item) => <div>{item.financeName}<small className="block text-[#7c8b88]">{item.financeCode}</small></div> },
-    { key: 'code', header: 'Component code', render: (item) => <strong>{item.code}</strong> },
+    { key: 'project', header: 'Project', render: (item) => <div>{item.projectName}<small className="block text-[#7c8b88]">{formatCode(item.projectCode)}</small></div> },
+    { key: 'finance', header: 'Finance', render: (item) => <div>{item.financeName}<small className="block text-[#7c8b88]">{formatCode(item.financeCode)}</small></div> },
+    { key: 'code', header: 'Component code', render: (item) => <strong>{formatCode(item.code)}</strong> },
     { key: 'name', header: 'Component name', render: (item) => item.name },
     { key: 'status', header: 'Status', render: (item) => <StatusBadge label={item.status} tone={item.status === 'ACTIVE' ? 'success' : 'neutral'} /> },
     ...(canEdit ? [{ key: 'edit', header: 'Edit', headerGroup: 'Action', align: 'center' as const, render: (item: ComponentCode) => <TableActionButton label={`Edit ${item.name}`} onClick={() => setEditing(item)}><Pencil className="size-4" aria-hidden /></TableActionButton> }] : []),
@@ -47,10 +49,10 @@ export function ComponentCodeSetupPage() {
   if (!canView) return <PageContainer breadcrumbs={crumbs} title="Access denied"><Card>You do not have access to component code setup.</Card></PageContainer>
   const defaultProject = projectId || String(projects.find((item) => item.status === 'ACTIVE')?.id ?? '')
   const defaultFinance = financeId || String(finances.find((item) => String(item.projectCodeId) === defaultProject && item.status === 'ACTIVE')?.id ?? '')
-  return <PageContainer breadcrumbs={crumbs} title="Component setup" action={canEdit && finances.some((item) => item.status === 'ACTIVE') ? <Button onClick={() => setEditing(null)}>Add component code</Button> : undefined}>
-    <div className="mb-4 flex flex-wrap justify-end gap-3"><CompanyCodeSelector companies={companies.map((item) => ({ id: item.id, code: item.code, name: item.legalName }))} value={companyId} disabled={!user?.superAdmin} onChange={(id) => { setCompanyId(id); void load(id) }} /><div className="w-[250px] max-sm:w-full"><SearchableSelect ariaLabel="Filter by project" value={projectId} options={[{ value: '', label: 'All projects' }, ...projects.map((item) => ({ value: String(item.id), label: item.name, description: String(item.code) }))]} onChange={(value) => { setProjectId(value); setFinanceId('') }} searchPlaceholder="Search projects..." /></div><div className="w-[250px] max-sm:w-full"><SearchableSelect ariaLabel="Filter by finance code" value={financeId} options={[{ value: '', label: 'All finance codes' }, ...filteredFinances.map((item) => ({ value: String(item.id), label: item.name, description: String(item.code) }))]} onChange={setFinanceId} searchPlaceholder="Search finance codes..." /></div></div>
+  return <PageContainer breadcrumbs={crumbs} title="Component setup" action={canEdit && finances.some((item) => item.status === 'ACTIVE') ? <Button onClick={() => setEditing(null)}><span className="inline-flex items-center gap-2"><PlusIcon className="size-4" aria-hidden />Add New</span></Button> : undefined}>
+    <div className="mb-4 flex flex-wrap justify-end gap-3"><CompanyCodeSelector companies={companies.map((item) => ({ id: item.id, code: item.code, name: item.legalName }))} value={companyId} disabled={!user?.superAdmin} onChange={(id) => { setCompanyId(id); void load(id) }} /><div className="w-[250px] max-sm:w-full"><SearchableSelect ariaLabel="Filter by project" value={projectId} options={[{ value: '', label: 'All projects' }, ...projects.map((item) => ({ value: String(item.id), label: item.name, description: formatCode(item.code) }))]} onChange={(value) => { setProjectId(value); setFinanceId('') }} searchPlaceholder="Search projects..." /></div><div className="w-[250px] max-sm:w-full"><SearchableSelect ariaLabel="Filter by finance code" value={financeId} options={[{ value: '', label: 'All finance codes' }, ...filteredFinances.map((item) => ({ value: String(item.id), label: item.name, description: formatCode(item.code) }))]} onChange={setFinanceId} searchPlaceholder="Search finance codes..." /></div></div>
     <Card><SkeletonBoundary loading={loading} fallback={<TableSkeleton columns={6} rows={5} />} minimumDurationMs={500}><DataTable columns={columns} rows={visible} rowKey={(item) => item.id} emptyMessage="No component codes are configured." /></SkeletonBoundary></Card>
-    <Modal open={editing !== undefined} title={editing ? 'Edit component code' : 'Create component code'} onClose={() => setEditing(undefined)}><ComponentCodeForm item={editing ?? undefined} projects={projects} finances={finances} defaultProjectId={defaultProject} defaultFinanceId={defaultFinance} onSave={save} onCancel={() => setEditing(undefined)} /></Modal>
+    <Modal open={editing !== undefined} title={editing ? 'Edit Component' : 'Create New Component'} onClose={() => setEditing(undefined)}><ComponentCodeForm item={editing ?? undefined} projects={projects} finances={finances} defaultProjectId={defaultProject} defaultFinanceId={defaultFinance} onSave={save} onCancel={() => setEditing(undefined)} /></Modal>
   </PageContainer>
 }
 

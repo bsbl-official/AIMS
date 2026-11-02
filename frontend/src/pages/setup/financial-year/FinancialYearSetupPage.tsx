@@ -120,7 +120,7 @@ export function FinancialYearSetupPage() {
           Financial year starts in
           <SearchableSelect ariaLabel="Financial year start month" options={MONTH_OPTIONS} value={String(startMonth)} onChange={selectStartMonth} disabled={!companyId || loading} />
         </label>
-        {companyId && <Button className="h-[43px] shrink-0 self-end py-0" disabled={!dirty || saving || loading} onClick={() => void save()}>{saving ? 'Updating...' : 'Update'}</Button>}
+        {companyId && <Button className="h-[43px] shrink-0 self-end py-0" disabled={!dirty || saving || loading} onClick={() => void save()}>{saving ? 'Saving...' : 'Save'}</Button>}
         <p className="min-w-64 flex-1 rounded-lg bg-white/75 px-4 py-[11px] text-[13px] leading-5 text-[#526b67]">
           Period 1 begins in <strong className="text-[#294b4e]">{monthName(startMonth)}</strong>. The twelve periods and four quarters are generated automatically.
         </p>

@@ -2,7 +2,7 @@ package com.accountbm.coa.model;
 
 import java.time.Instant;
 
-public record ChartOfAccount(
+public record InitialCoa(
         Long coaId,
         String description,
         String insertedBy,

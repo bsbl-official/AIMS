@@ -59,7 +59,7 @@ public class FinancialStatementService {
                     """, companyCode, coaId, reportCode, request.reportDescription().strip(),
                     blank(request.summaryLabel()));
         } catch (DataIntegrityViolationException exception) {
-            throw conflict("A report with this code already exists for the selected company and COA");
+            throw conflict("A report with this code already exists for the selected company and Initial COA");
         }
         audit(companyId, actorId, "FINANCIAL_REPORT_CREATED", key(coaId, reportCode));
         return response(companyCode, coaId, findReport(companyCode, coaId, reportCode));
@@ -419,7 +419,7 @@ public class FinancialStatementService {
     private Long defaultCoa() {
         var rows = jdbc.query("SELECT coa_id FROM a_coa ORDER BY coa_id LIMIT 1",
                 (rs, rowNum) -> rs.getLong(1));
-        if (rows.isEmpty()) throw notFound("Default chart of accounts");
+        if (rows.isEmpty()) throw notFound("Default Initial COA");
         return rows.getFirst();
     }
 
