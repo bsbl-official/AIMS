@@ -29,11 +29,12 @@ public class FinancialStatementService {
     }
 
     @Transactional(readOnly = true)
-    public List<ReportResponse> hierarchy(UUID companyId, UUID actorId) {
+    public List<ReportResponse> hierarchy(UUID companyId, Long coaId, UUID actorId) {
         access.requireCompanyPermission(actorId, companyId,
                 "financial_statements.read", "financial_statements.manage");
         var companyCode = companyCode(companyId);
-        var normalizedCoa = defaultCoa();
+        var normalizedCoa = coaId == null ? defaultCoa() : coaId;
+        requireCoa(normalizedCoa);
         return jdbc.query("""
                 SELECT report_code, report_desc, report_sum_label
                 FROM a_rep_code
@@ -48,16 +49,20 @@ public class FinancialStatementService {
     @Transactional
     public ReportResponse createReport(UUID companyId, CreateReportRequest request, UUID actorId) {
         access.requireCompanyPermission(actorId, companyId, "financial_statements.manage");
-        var companyCode = companyCode(companyId);
-        var coaId = defaultCoa();
+        var context = requireContext(companyId, request.companyCode(), request.coaId(), request.branchCode(),
+                request.projectCode(), request.financeCode(), request.componentCode());
+        var companyCode = context.companyCode();
+        var coaId = context.coaId();
         var reportCode = code(request.reportCode());
         try {
             jdbc.update("""
                     INSERT INTO a_rep_code
-                        (company_code, coa_id, report_code, report_desc, report_sum_label)
-                    VALUES (?, ?, ?, ?, ?)
+                        (company_code, coa_id, report_code, report_desc, report_sum_label,
+                         branch_code, project_code, finance_code, component_code)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """, companyCode, coaId, reportCode, request.reportDescription().strip(),
-                    blank(request.summaryLabel()));
+                    blank(request.summaryLabel()), context.branchCode(), context.projectCode(),
+                    context.financeCode(), context.componentCode());
         } catch (DataIntegrityViolationException exception) {
             throw conflict("A report with this code already exists for the selected company and Initial COA");
         }
@@ -66,20 +71,30 @@ public class FinancialStatementService {
     }
 
     @Transactional
+    public List<ReportResponse> createReports(UUID companyId, List<CreateReportRequest> requests, UUID actorId) {
+        requireBatch(requests);
+        return requests.stream().map(request -> createReport(companyId, request, actorId)).toList();
+    }
+
+    @Transactional
     public GroupResponse createGroup(UUID companyId, CreateGroupRequest request, UUID actorId) {
         access.requireCompanyPermission(actorId, companyId, "financial_statements.manage");
-        var companyCode = companyCode(companyId);
-        var coaId = defaultCoa();
+        var context = requireContext(companyId, request.companyCode(), request.coaId(), request.branchCode(),
+                request.projectCode(), request.financeCode(), request.componentCode());
+        var companyCode = context.companyCode();
+        var coaId = context.coaId();
         var reportCode = code(request.reportCode());
         var groupCode = code(request.groupCode());
         findReport(companyCode, coaId, reportCode);
         try {
             jdbc.update("""
                     INSERT INTO a_rep_group
-                        (company_code, coa_id, report_code, group_code, group_desc, group_sum_label)
-                    VALUES (?, ?, ?, ?, ?, ?)
+                        (company_code, coa_id, report_code, group_code, group_desc, group_sum_label,
+                         branch_code, project_code, finance_code, component_code)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """, companyCode, coaId, reportCode, groupCode,
-                    request.groupDescription().strip(), blank(request.summaryLabel()));
+                    request.groupDescription().strip(), blank(request.summaryLabel()), context.branchCode(),
+                    context.projectCode(), context.financeCode(), context.componentCode());
         } catch (DataIntegrityViolationException exception) {
             throw conflict("A group with this code already exists under the selected report");
         }
@@ -89,10 +104,18 @@ public class FinancialStatementService {
     }
 
     @Transactional
+    public List<GroupResponse> createGroups(UUID companyId, List<CreateGroupRequest> requests, UUID actorId) {
+        requireBatch(requests);
+        return requests.stream().map(request -> createGroup(companyId, request, actorId)).toList();
+    }
+
+    @Transactional
     public LayerResponse createLayer(UUID companyId, CreateLayerRequest request, UUID actorId) {
         access.requireCompanyPermission(actorId, companyId, "financial_statements.manage");
-        var companyCode = companyCode(companyId);
-        var coaId = defaultCoa();
+        var context = requireContext(companyId, request.companyCode(), request.coaId(), request.branchCode(),
+                request.projectCode(), request.financeCode(), request.componentCode());
+        var companyCode = context.companyCode();
+        var coaId = context.coaId();
         var reportCode = code(request.reportCode());
         var groupCode = code(request.groupCode());
         var layerCode = code(request.layerCode());
@@ -101,10 +124,12 @@ public class FinancialStatementService {
             jdbc.update("""
                     INSERT INTO a_rep_layer1
                         (company_code, coa_id, report_code, group_code, layer1_code,
-                         layer1_desc, layer1_sum_label, layer1_sign)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                         layer1_desc, layer1_sum_label, layer1_sign,
+                         branch_code, project_code, finance_code, component_code)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """, companyCode, coaId, reportCode, groupCode, layerCode,
-                    request.layerDescription().strip(), blank(request.summaryLabel()), blank(request.sign()));
+                    request.layerDescription().strip(), blank(request.summaryLabel()), blank(request.sign()),
+                    context.branchCode(), context.projectCode(), context.financeCode(), context.componentCode());
         } catch (DataIntegrityViolationException exception) {
             throw conflict("A layer with this code already exists under the selected group");
         }
@@ -114,11 +139,19 @@ public class FinancialStatementService {
     }
 
     @Transactional
+    public List<LayerResponse> createLayers(UUID companyId, List<CreateLayerRequest> requests, UUID actorId) {
+        requireBatch(requests);
+        return requests.stream().map(request -> createLayer(companyId, request, actorId)).toList();
+    }
+
+    @Transactional
     public SpecificationResponse createSpecification(
             UUID companyId, CreateSpecificationRequest request, UUID actorId) {
         access.requireCompanyPermission(actorId, companyId, "financial_statements.manage");
-        var companyCode = companyCode(companyId);
-        var coaId = defaultCoa();
+        var context = requireContext(companyId, request.companyCode(), request.coaId(), request.branchCode(),
+                request.projectCode(), request.financeCode(), request.componentCode());
+        var companyCode = context.companyCode();
+        var coaId = context.coaId();
         var reportCode = code(request.reportCode());
         var groupCode = code(request.groupCode());
         var layerCode = code(request.layerCode());
@@ -135,10 +168,11 @@ public class FinancialStatementService {
                         layer2_code, layer2_desc, layer2_sign, note_id, retain_earning_flag,
                         report_short, cf_flag, rp_flag, ratio_parameter, lq_cash_flag, savings_flag,
                         debt_flag, prn_paid_flag, sc_paid_flag, cur_asset_flag, cur_liability_flag,
-                        split_figure_flag, combine_flag, ins_date, ins_user, layer2_code_dummy
+                        split_figure_flag, combine_flag, ins_date, ins_user, layer2_code_dummy,
+                        branch_code, project_code, finance_code, component_code
                     ) VALUES (
                         ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
-                        ?, ?, ?, ?, ?, ?, ?, clock_timestamp(), ?, ?
+                        ?, ?, ?, ?, ?, ?, ?, clock_timestamp(), ?, ?, ?, ?, ?, ?
                     )
                     """, companyCode, coaId, upper(request.reportType()), reportCode,
                     report.description(), report.summaryLabel(), groupCode, group.description(),
@@ -151,7 +185,8 @@ public class FinancialStatementService {
                     upper(request.principalPaidFlag()), upper(request.serviceChargePaidFlag()),
                     upper(request.currentAssetFlag()), upper(request.currentLiabilityFlag()),
                     upper(request.splitFigureFlag()), upper(request.combineFlag()), actorId.toString(),
-                    codeOrNull(request.specificationCodeDummy()));
+                    codeOrNull(request.specificationCodeDummy()), context.branchCode(), context.projectCode(),
+                    context.financeCode(), context.componentCode());
         } catch (DataIntegrityViolationException exception) {
             throw conflict("A specification with this code already exists under the selected layer");
         }
@@ -162,15 +197,26 @@ public class FinancialStatementService {
     }
 
     @Transactional
+    public List<SpecificationResponse> createSpecifications(UUID companyId,
+            List<CreateSpecificationRequest> requests, UUID actorId) {
+        requireBatch(requests);
+        return requests.stream().map(request -> createSpecification(companyId, request, actorId)).toList();
+    }
+
+    @Transactional
     public ReportResponse updateReport(UUID companyId, String reportCode, UpdateReportRequest request, UUID actorId) {
         access.requireCompanyPermission(actorId, companyId, "financial_statements.manage");
-        var companyCode = companyCode(companyId);
-        var coaId = defaultCoa();
+        var context = requireContext(companyId, request.companyCode(), request.coaId(), request.branchCode(),
+                request.projectCode(), request.financeCode(), request.componentCode());
+        var companyCode = context.companyCode();
+        var coaId = context.coaId();
         var normalizedReport = code(reportCode);
         requireUpdated(jdbc.update("""
-                UPDATE a_rep_code SET report_desc = ?, report_sum_label = ?
+                UPDATE a_rep_code SET report_desc = ?, report_sum_label = ?, branch_code = ?,
+                    project_code = ?, finance_code = ?, component_code = ?
                 WHERE company_code = ? AND coa_id = ? AND report_code = ?
                 """, request.reportDescription().strip(), blank(request.summaryLabel()),
+                context.branchCode(), context.projectCode(), context.financeCode(), context.componentCode(),
                 companyCode, coaId, normalizedReport), "Report");
         jdbc.update("""
                 UPDATE a_rep_spec SET report_desc = ?, report_sum_label = ?, upd_date = clock_timestamp(), upd_user = ?
@@ -182,10 +228,11 @@ public class FinancialStatementService {
     }
 
     @Transactional
-    public void deleteReport(UUID companyId, String reportCode, UUID actorId) {
+    public void deleteReport(UUID companyId, long selectedCoaId, String reportCode, UUID actorId) {
         access.requireCompanyPermission(actorId, companyId, "financial_statements.manage");
         var companyCode = companyCode(companyId);
-        var coaId = defaultCoa();
+        var coaId = selectedCoaId;
+        requireCoa(coaId);
         var normalizedReport = code(reportCode);
         try {
             requireDeleted(jdbc.update("DELETE FROM a_rep_code WHERE company_code = ? AND coa_id = ? AND report_code = ?",
@@ -200,14 +247,18 @@ public class FinancialStatementService {
     public GroupResponse updateGroup(UUID companyId, String reportCode, String groupCode,
             UpdateGroupRequest request, UUID actorId) {
         access.requireCompanyPermission(actorId, companyId, "financial_statements.manage");
-        var companyCode = companyCode(companyId);
-        var coaId = defaultCoa();
+        var context = requireContext(companyId, request.companyCode(), request.coaId(), request.branchCode(),
+                request.projectCode(), request.financeCode(), request.componentCode());
+        var companyCode = context.companyCode();
+        var coaId = context.coaId();
         var normalizedReport = code(reportCode);
         var normalizedGroup = code(groupCode);
         requireUpdated(jdbc.update("""
-                UPDATE a_rep_group SET group_desc = ?, group_sum_label = ?
+                UPDATE a_rep_group SET group_desc = ?, group_sum_label = ?, branch_code = ?,
+                    project_code = ?, finance_code = ?, component_code = ?
                 WHERE company_code = ? AND coa_id = ? AND report_code = ? AND group_code = ?
                 """, request.groupDescription().strip(), blank(request.summaryLabel()),
+                context.branchCode(), context.projectCode(), context.financeCode(), context.componentCode(),
                 companyCode, coaId, normalizedReport, normalizedGroup), "Report group");
         jdbc.update("""
                 UPDATE a_rep_spec SET group_desc = ?, group_sum_label = ?, upd_date = clock_timestamp(), upd_user = ?
@@ -220,10 +271,11 @@ public class FinancialStatementService {
     }
 
     @Transactional
-    public void deleteGroup(UUID companyId, String reportCode, String groupCode, UUID actorId) {
+    public void deleteGroup(UUID companyId, long selectedCoaId, String reportCode, String groupCode, UUID actorId) {
         access.requireCompanyPermission(actorId, companyId, "financial_statements.manage");
         var companyCode = companyCode(companyId);
-        var coaId = defaultCoa();
+        var coaId = selectedCoaId;
+        requireCoa(coaId);
         var normalizedReport = code(reportCode);
         var normalizedGroup = code(groupCode);
         try {
@@ -241,15 +293,19 @@ public class FinancialStatementService {
     public LayerResponse updateLayer(UUID companyId, String reportCode, String groupCode, String layerCode,
             UpdateLayerRequest request, UUID actorId) {
         access.requireCompanyPermission(actorId, companyId, "financial_statements.manage");
-        var companyCode = companyCode(companyId);
-        var coaId = defaultCoa();
+        var context = requireContext(companyId, request.companyCode(), request.coaId(), request.branchCode(),
+                request.projectCode(), request.financeCode(), request.componentCode());
+        var companyCode = context.companyCode();
+        var coaId = context.coaId();
         var normalizedReport = code(reportCode);
         var normalizedGroup = code(groupCode);
         var normalizedLayer = code(layerCode);
         requireUpdated(jdbc.update("""
-                UPDATE a_rep_layer1 SET layer1_desc = ?, layer1_sum_label = ?, layer1_sign = ?
+                UPDATE a_rep_layer1 SET layer1_desc = ?, layer1_sum_label = ?, layer1_sign = ?,
+                    branch_code = ?, project_code = ?, finance_code = ?, component_code = ?
                 WHERE company_code = ? AND coa_id = ? AND report_code = ? AND group_code = ? AND layer1_code = ?
                 """, request.layerDescription().strip(), blank(request.summaryLabel()), blank(request.sign()),
+                context.branchCode(), context.projectCode(), context.financeCode(), context.componentCode(),
                 companyCode, coaId, normalizedReport, normalizedGroup, normalizedLayer), "Statement layer");
         jdbc.update("""
                 UPDATE a_rep_spec SET layer1_desc = ?, layer1_sum_label = ?, layer1_sign = ?,
@@ -263,10 +319,11 @@ public class FinancialStatementService {
     }
 
     @Transactional
-    public void deleteLayer(UUID companyId, String reportCode, String groupCode, String layerCode, UUID actorId) {
+    public void deleteLayer(UUID companyId, long selectedCoaId, String reportCode, String groupCode, String layerCode, UUID actorId) {
         access.requireCompanyPermission(actorId, companyId, "financial_statements.manage");
         var companyCode = companyCode(companyId);
-        var coaId = defaultCoa();
+        var coaId = selectedCoaId;
+        requireCoa(coaId);
         var normalizedReport = code(reportCode);
         var normalizedGroup = code(groupCode);
         var normalizedLayer = code(layerCode);
@@ -286,8 +343,10 @@ public class FinancialStatementService {
             String layerCode, String reportType, String specificationCode,
             UpdateSpecificationRequest request, UUID actorId) {
         access.requireCompanyPermission(actorId, companyId, "financial_statements.manage");
-        var companyCode = companyCode(companyId);
-        var coaId = defaultCoa();
+        var context = requireContext(companyId, request.companyCode(), request.coaId(), request.branchCode(),
+                request.projectCode(), request.financeCode(), request.componentCode());
+        var companyCode = context.companyCode();
+        var coaId = context.coaId();
         var normalizedReport = code(reportCode);
         var normalizedGroup = code(groupCode);
         var normalizedLayer = code(layerCode);
@@ -298,7 +357,8 @@ public class FinancialStatementService {
                     retain_earning_flag = ?, report_short = ?, cf_flag = ?, rp_flag = ?, ratio_parameter = ?,
                     lq_cash_flag = ?, savings_flag = ?, debt_flag = ?, prn_paid_flag = ?, sc_paid_flag = ?,
                     cur_asset_flag = ?, cur_liability_flag = ?, split_figure_flag = ?, combine_flag = ?,
-                    layer2_code_dummy = ?, upd_date = clock_timestamp(), upd_user = ?
+                    layer2_code_dummy = ?, branch_code = ?, project_code = ?, finance_code = ?,
+                    component_code = ?, upd_date = clock_timestamp(), upd_user = ?
                 WHERE company_code = ? AND coa_id = ? AND report_type = ? AND report_code = ?
                   AND group_code = ? AND layer1_code = ? AND layer2_code = ?
                 """, request.specificationDescription().strip(), blank(request.groupSign()), blank(request.sign()),
@@ -308,6 +368,7 @@ public class FinancialStatementService {
                 upper(request.principalPaidFlag()), upper(request.serviceChargePaidFlag()),
                 upper(request.currentAssetFlag()), upper(request.currentLiabilityFlag()),
                 upper(request.splitFigureFlag()), upper(request.combineFlag()), codeOrNull(request.specificationCodeDummy()),
+                context.branchCode(), context.projectCode(), context.financeCode(), context.componentCode(),
                 actorId.toString(), companyCode, coaId, normalizedType, normalizedReport, normalizedGroup,
                 normalizedLayer, normalizedSpecification), "Statement specification");
         audit(companyId, actorId, "FINANCIAL_SPECIFICATION_UPDATED",
@@ -317,11 +378,12 @@ public class FinancialStatementService {
     }
 
     @Transactional
-    public void deleteSpecification(UUID companyId, String reportCode, String groupCode, String layerCode,
+    public void deleteSpecification(UUID companyId, long selectedCoaId, String reportCode, String groupCode, String layerCode,
             String reportType, String specificationCode, UUID actorId) {
         access.requireCompanyPermission(actorId, companyId, "financial_statements.manage");
         var companyCode = companyCode(companyId);
-        var coaId = defaultCoa();
+        var coaId = selectedCoaId;
+        requireCoa(coaId);
         var normalizedReport = code(reportCode);
         var normalizedGroup = code(groupCode);
         var normalizedLayer = code(layerCode);
@@ -416,11 +478,45 @@ public class FinancialStatementService {
         return rows.getFirst();
     }
 
+    private Context requireContext(UUID companyId, String payloadCompany, Long coaId, String branchCode,
+            Integer projectCode, Integer financeCode, Integer componentCode) {
+        var companyCode = companyCode(companyId);
+        if (!companyCode.equals(payloadCompany))
+            throw badRequest("company_code must match the selected company");
+        if (coaId == null || branchCode == null || projectCode == null || financeCode == null || componentCode == null)
+            throw badRequest("Initial COA, branch, project, finance code, and component code are required");
+        Boolean valid = jdbc.queryForObject("""
+                SELECT EXISTS (
+                    SELECT 1 FROM organizations company
+                    JOIN branches branch ON branch.organization_id = company.id
+                        AND branch.code = ? AND branch.status = 'ACTIVE'
+                    JOIN project_codes project ON project.organization_id = company.id
+                        AND project.id = ? AND project.status = 'ACTIVE'
+                    JOIN finance_codes finance ON finance.organization_id = company.id
+                        AND finance.project_code_id = project.id AND finance.id = ? AND finance.status = 'ACTIVE'
+                    JOIN component_codes component ON component.organization_id = company.id
+                        AND component.project_code_id = project.id AND component.finance_code_id = finance.id
+                        AND component.id = ? AND component.status = 'ACTIVE'
+                    JOIN a_coa coa ON coa.coa_id = ?
+                    WHERE company.id = ? AND company.code = ?
+                )
+                """, Boolean.class, branchCode.strip(), projectCode, financeCode, componentCode, coaId,
+                companyId, companyCode);
+        if (!Boolean.TRUE.equals(valid))
+            throw badRequest("Select a valid Initial COA and an active branch, project, finance code, and component code from the same company hierarchy");
+        return new Context(companyCode, coaId, branchCode.strip(), projectCode, financeCode, componentCode);
+    }
+
     private Long defaultCoa() {
         var rows = jdbc.query("SELECT coa_id FROM a_coa ORDER BY coa_id LIMIT 1",
                 (rs, rowNum) -> rs.getLong(1));
         if (rows.isEmpty()) throw notFound("Default Initial COA");
         return rows.getFirst();
+    }
+
+    private void requireCoa(Long coaId) {
+        Boolean exists = jdbc.queryForObject("SELECT EXISTS (SELECT 1 FROM a_coa WHERE coa_id = ?)", Boolean.class, coaId);
+        if (!Boolean.TRUE.equals(exists)) throw notFound("Initial COA");
     }
 
     private void audit(UUID companyId, UUID actorId, String action, String entityId) {
@@ -433,6 +529,18 @@ public class FinancialStatementService {
     private static void requireUpdated(int affectedRows, String item) {
         if (affectedRows == 0) throw notFound(item);
     }
+
+    private static void requireBatch(List<?> requests) {
+        if (requests == null || requests.isEmpty()) throw badRequest("Add at least one financial statement record");
+        if (requests.size() > 100) throw badRequest("A batch can contain at most 100 records");
+    }
+
+    private static ResponseStatusException badRequest(String message) {
+        return new ResponseStatusException(HttpStatus.BAD_REQUEST, message);
+    }
+
+    private record Context(String companyCode, Long coaId, String branchCode,
+            Integer projectCode, Integer financeCode, Integer componentCode) {}
 
     private static void requireDeleted(int affectedRows, String item) {
         if (affectedRows == 0) throw notFound(item);

@@ -32,6 +32,14 @@ public class AccountLayerController {
         return ResponseEntity.created(URI.create("/api/companies/" + companyId + "/account-layers/" + level + "?coaId=" + coaId)).body(result);
     }
 
+    @PostMapping("/{level}/batch")
+    @PreAuthorize("hasAnyAuthority('permission:*','permission:coa.manage')")
+    public ResponseEntity<List<Map<String, Object>>> createBatch(@PathVariable UUID companyId, @PathVariable int level,
+            @RequestParam long coaId, @RequestBody List<Map<String, Object>> data, @AuthenticationPrincipal Jwt jwt) {
+        var result = service.saveBatch(companyId, coaId, level, data, actor(jwt));
+        return ResponseEntity.created(URI.create("/api/companies/" + companyId + "/account-layers/" + level + "?coaId=" + coaId)).body(result);
+    }
+
     @PutMapping("/{level}")
     @PreAuthorize("hasAnyAuthority('permission:*','permission:coa.manage')")
     public Map<String, Object> update(@PathVariable UUID companyId, @PathVariable int level,

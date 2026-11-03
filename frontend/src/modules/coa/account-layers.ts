@@ -51,5 +51,6 @@ export const accountLayerApi = {
   categories: (company:string, signal?:AbortSignal) => request<Category[]>(`/companies/${company}/account-layers/categories`,{signal}),
   createCategory: (company:string, values:Category) => request<Category>(`/companies/${company}/account-layers/categories`,{method:'POST',body:JSON.stringify(values)}),
   save: (company:string, coa:string, level:number, values:AccountValues, editing:boolean) => request<AccountRow>(`/companies/${company}/account-layers/${level}?coaId=${encodeURIComponent(coa)}`,{method:editing?'PUT':'POST',body:JSON.stringify(values)}),
+  saveBatch: (company:string, coa:string, level:number, values:AccountValues[]) => request<AccountRow[]>(`/companies/${company}/account-layers/${level}/batch?coaId=${encodeURIComponent(coa)}`,{method:'POST',body:JSON.stringify(values)}),
   remove: (company:string, coa:string, level:number, row:AccountRow) => request<void>(`/companies/${company}/account-layers/${level}?coaId=${encodeURIComponent(coa)}`,{method:'DELETE',body:JSON.stringify(row)}),
 }

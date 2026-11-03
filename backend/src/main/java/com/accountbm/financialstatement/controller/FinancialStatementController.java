@@ -27,8 +27,9 @@ public class FinancialStatementController {
     @PreAuthorize("hasAnyAuthority('permission:*', 'permission:financial_statements.read', 'permission:financial_statements.manage')")
     public List<ReportResponse> hierarchy(
             @PathVariable UUID companyId,
+            @RequestParam(required = false) Long coaId,
             @AuthenticationPrincipal Jwt jwt) {
-        return service.hierarchy(companyId, actorId(jwt));
+        return service.hierarchy(companyId, coaId, actorId(jwt));
     }
 
     @PostMapping("/reports")
@@ -41,6 +42,13 @@ public class FinancialStatementController {
         return ResponseEntity.created(location(companyId)).body(result);
     }
 
+    @PostMapping("/reports/batch")
+    @PreAuthorize("hasAnyAuthority('permission:*', 'permission:financial_statements.manage')")
+    public ResponseEntity<List<ReportResponse>> createReports(@PathVariable UUID companyId,
+            @Valid @RequestBody List<@Valid CreateReportRequest> requests, @AuthenticationPrincipal Jwt jwt) {
+        return ResponseEntity.created(location(companyId)).body(service.createReports(companyId, requests, actorId(jwt)));
+    }
+
     @PostMapping("/groups")
     @PreAuthorize("hasAnyAuthority('permission:*', 'permission:financial_statements.manage')")
     public ResponseEntity<GroupResponse> createGroup(
@@ -49,6 +57,13 @@ public class FinancialStatementController {
             @AuthenticationPrincipal Jwt jwt) {
         var result = service.createGroup(companyId, request, actorId(jwt));
         return ResponseEntity.created(location(companyId)).body(result);
+    }
+
+    @PostMapping("/groups/batch")
+    @PreAuthorize("hasAnyAuthority('permission:*', 'permission:financial_statements.manage')")
+    public ResponseEntity<List<GroupResponse>> createGroups(@PathVariable UUID companyId,
+            @Valid @RequestBody List<@Valid CreateGroupRequest> requests, @AuthenticationPrincipal Jwt jwt) {
+        return ResponseEntity.created(location(companyId)).body(service.createGroups(companyId, requests, actorId(jwt)));
     }
 
     @PostMapping("/layers")
@@ -61,6 +76,13 @@ public class FinancialStatementController {
         return ResponseEntity.created(location(companyId)).body(result);
     }
 
+    @PostMapping("/layers/batch")
+    @PreAuthorize("hasAnyAuthority('permission:*', 'permission:financial_statements.manage')")
+    public ResponseEntity<List<LayerResponse>> createLayers(@PathVariable UUID companyId,
+            @Valid @RequestBody List<@Valid CreateLayerRequest> requests, @AuthenticationPrincipal Jwt jwt) {
+        return ResponseEntity.created(location(companyId)).body(service.createLayers(companyId, requests, actorId(jwt)));
+    }
+
     @PostMapping("/specifications")
     @PreAuthorize("hasAnyAuthority('permission:*', 'permission:financial_statements.manage')")
     public ResponseEntity<SpecificationResponse> createSpecification(
@@ -69,6 +91,13 @@ public class FinancialStatementController {
             @AuthenticationPrincipal Jwt jwt) {
         var result = service.createSpecification(companyId, request, actorId(jwt));
         return ResponseEntity.created(location(companyId)).body(result);
+    }
+
+    @PostMapping("/specifications/batch")
+    @PreAuthorize("hasAnyAuthority('permission:*', 'permission:financial_statements.manage')")
+    public ResponseEntity<List<SpecificationResponse>> createSpecifications(@PathVariable UUID companyId,
+            @Valid @RequestBody List<@Valid CreateSpecificationRequest> requests, @AuthenticationPrincipal Jwt jwt) {
+        return ResponseEntity.created(location(companyId)).body(service.createSpecifications(companyId, requests, actorId(jwt)));
     }
 
     @PutMapping("/reports/{reportCode}")
@@ -81,8 +110,8 @@ public class FinancialStatementController {
     @DeleteMapping("/reports/{reportCode}")
     @PreAuthorize("hasAnyAuthority('permission:*', 'permission:financial_statements.manage')")
     public ResponseEntity<Void> deleteReport(@PathVariable UUID companyId, @PathVariable String reportCode,
-            @AuthenticationPrincipal Jwt jwt) {
-        service.deleteReport(companyId, reportCode, actorId(jwt));
+            @RequestParam long coaId, @AuthenticationPrincipal Jwt jwt) {
+        service.deleteReport(companyId, coaId, reportCode, actorId(jwt));
         return ResponseEntity.noContent().build();
     }
 
@@ -97,8 +126,8 @@ public class FinancialStatementController {
     @DeleteMapping("/groups/{reportCode}/{groupCode}")
     @PreAuthorize("hasAnyAuthority('permission:*', 'permission:financial_statements.manage')")
     public ResponseEntity<Void> deleteGroup(@PathVariable UUID companyId, @PathVariable String reportCode,
-            @PathVariable String groupCode, @AuthenticationPrincipal Jwt jwt) {
-        service.deleteGroup(companyId, reportCode, groupCode, actorId(jwt));
+            @PathVariable String groupCode, @RequestParam long coaId, @AuthenticationPrincipal Jwt jwt) {
+        service.deleteGroup(companyId, coaId, reportCode, groupCode, actorId(jwt));
         return ResponseEntity.noContent().build();
     }
 
@@ -113,8 +142,9 @@ public class FinancialStatementController {
     @DeleteMapping("/layers/{reportCode}/{groupCode}/{layerCode}")
     @PreAuthorize("hasAnyAuthority('permission:*', 'permission:financial_statements.manage')")
     public ResponseEntity<Void> deleteLayer(@PathVariable UUID companyId, @PathVariable String reportCode,
-            @PathVariable String groupCode, @PathVariable String layerCode, @AuthenticationPrincipal Jwt jwt) {
-        service.deleteLayer(companyId, reportCode, groupCode, layerCode, actorId(jwt));
+            @PathVariable String groupCode, @PathVariable String layerCode, @RequestParam long coaId,
+            @AuthenticationPrincipal Jwt jwt) {
+        service.deleteLayer(companyId, coaId, reportCode, groupCode, layerCode, actorId(jwt));
         return ResponseEntity.noContent().build();
     }
 
@@ -133,8 +163,8 @@ public class FinancialStatementController {
     public ResponseEntity<Void> deleteSpecification(@PathVariable UUID companyId,
             @PathVariable String reportCode, @PathVariable String groupCode, @PathVariable String layerCode,
             @PathVariable String reportType, @PathVariable String specificationCode,
-            @AuthenticationPrincipal Jwt jwt) {
-        service.deleteSpecification(companyId, reportCode, groupCode, layerCode, reportType,
+            @RequestParam long coaId, @AuthenticationPrincipal Jwt jwt) {
+        service.deleteSpecification(companyId, coaId, reportCode, groupCode, layerCode, reportType,
                 specificationCode, actorId(jwt));
         return ResponseEntity.noContent().build();
     }

@@ -1,11 +1,19 @@
-import { Eye, Pencil, Plus, Search, SlidersHorizontal, Trash2 } from 'lucide-react'
-import { useCallback, useEffect, useState } from 'react'
+import { Eye, Filter, Pencil, Plus, Search, SlidersHorizontal, Trash2, X } from 'lucide-react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useAuth } from '../../../modules/auth/hooks/useAuth'
+import { branchApi } from '../../../modules/branch/api/branch.api'
+import type { Branch } from '../../../modules/branch/branch.types'
 import { companyApi } from '../../../modules/company/api/company.api'
 import type { Company } from '../../../modules/company/company.types'
+import { componentCodeApi } from '../../../modules/component-code/api/component-code.api'
+import type { ComponentCode } from '../../../modules/component-code/component-code.types'
 import { initialCoaApi } from '../../../modules/coa/api/coa.api'
 import { formatInitialCoaId, type InitialCoa } from '../../../modules/coa/coa.types'
 import { accountLayerApi, accountTypes, accountGroups, allFields, codeKey, defaultColumns, descriptionKey, editableFields, keyFields, layerNames, reportChoices, rowKey, type AccountField, type AccountRow, type AccountValues, type Category, type ReportOption } from '../../../modules/coa/account-layers'
+import { financeCodeApi } from '../../../modules/finance-code/api/finance-code.api'
+import type { FinanceCode } from '../../../modules/finance-code/finance-code.types'
+import { projectCodeApi } from '../../../modules/project-code/api/project-code.api'
+import type { ProjectCode } from '../../../modules/project-code/project-code.types'
 import { useToast } from '../../../modules/toast/hooks/useToast'
 import { Button } from '../../../shared/components/Button'
 import { CalendarPicker } from '../../../shared/components/CalendarPicker'
@@ -17,9 +25,11 @@ import { SearchableSelect } from '../../../shared/components/SearchableSelect'
 import { SkeletonBoundary, TableSkeleton } from '../../../shared/components/Skeleton'
 import { TableActionButton } from '../../../shared/components/TableActionButton'
 import { SetupFormField, SetupInput, setupInputClass } from '../../../shared/components/forms/SetupFormField'
+import { formatCode } from '../../../shared/utils/formatCode'
 
 const message = (error: unknown) => error instanceof Error ? error.message : 'Unable to complete the request.'
 const crumbs = [{label:'Dashboard',to:'/'},{label:'Setup'},{label:'Chart of Account setup'}]
+type AccountContext = {company_code:string;coa_id:string;branch_code:string;project_code:string;finance_code:string;component_code:string}
 
 export function AccountLayersPage() {
   const {can,user} = useAuth()
@@ -59,14 +69,26 @@ function AccountWorkspace({company,coa,companies,coas,onCompanyChange,onCoaChang
   const [rows,setRows]=useState<AccountRow[][]>([[],[],[],[],[]])
   const [reports,setReports]=useState<ReportOption[]>([])
   const [categories,setCategories]=useState<Category[]>([])
+  const [branches,setBranches]=useState<Branch[]>([])
+  const [projects,setProjects]=useState<ProjectCode[]>([])
+  const [finances,setFinances]=useState<FinanceCode[]>([])
+  const [components,setComponents]=useState<ComponentCode[]>([])
+  const [branchId,setBranchId]=useState('')
+  const [projectId,setProjectId]=useState('')
+  const [financeId,setFinanceId]=useState('')
+  const [componentId,setComponentId]=useState('')
   const [parents,setParents]=useState<string[]>(['','','',''])
   const [query,setQuery]=useState('')
   const [loading,setLoading]=useState(true)
   const [error,setError]=useState('')
+  const [contextError,setContextError]=useState('')
   const [form,setForm]=useState<{row:AccountRow|null;level:number}|null>(null)
   const [view,setView]=useState<AccountRow|null>(null)
   const [deleting,setDeleting]=useState<AccountRow|null>(null)
   const [deleteBusy,setDeleteBusy]=useState(false)
+  const [filterOpen,setFilterOpen]=useState(false)
+  const [draftParents,setDraftParents]=useState<string[]>(['','','',''])
+  const filterPopoverRef=useRef<HTMLDivElement>(null)
   const [columnModal,setColumnModal]=useState(false)
   const storageKey=`coa-head-columns:v1:${userId}`
   const [visible,setVisible]=useState<string[]>(()=>{
@@ -91,6 +113,41 @@ function AccountWorkspace({company,coa,companies,coas,onCompanyChange,onCoaChang
     void load(controller.signal).catch(e=>{if(!controller.signal.aborted){setError(message(e));setLoading(false)}})
     return ()=>controller.abort()
   },[load])
+  useEffect(()=>{
+    let active=true
+    setContextError('')
+    void Promise.all([branchApi.branches(company),projectCodeApi.list(company)]).then(([nextBranches,nextProjects])=>{
+      if(!active) return
+      const activeBranches=nextBranches.filter(item=>item.status==='ACTIVE')
+      const activeProjects=nextProjects.filter(item=>item.status==='ACTIVE')
+      setBranches(activeBranches);setProjects(activeProjects)
+      setBranchId(activeBranches[0]?.id ?? '')
+      setProjectId(String(activeProjects[0]?.id ?? ''))
+    }).catch(reason=>{if(active) setContextError(message(reason))})
+    return ()=>{active=false}
+  },[company])
+  useEffect(()=>{
+    let active=true
+    setFinances([]);setComponents([]);setFinanceId('');setComponentId('')
+    if(!projectId) return ()=>{active=false}
+    void financeCodeApi.list(company,projectId).then(next=>{
+      if(!active) return
+      const available=next.filter(item=>item.status==='ACTIVE')
+      setFinances(available);setFinanceId(String(available[0]?.id ?? ''))
+    }).catch(reason=>{if(active) setContextError(message(reason))})
+    return ()=>{active=false}
+  },[company,projectId])
+  useEffect(()=>{
+    let active=true
+    setComponents([]);setComponentId('')
+    if(!projectId || !financeId) return ()=>{active=false}
+    void componentCodeApi.list(company,projectId,financeId).then(next=>{
+      if(!active) return
+      const available=next.filter(item=>item.status==='ACTIVE')
+      setComponents(available);setComponentId(String(available[0]?.id ?? ''))
+    }).catch(reason=>{if(active) setContextError(message(reason))})
+    return ()=>{active=false}
+  },[company,financeId,projectId])
 
   function display(row:AccountRow,field:AccountField):string {
     const value=row[field.key]
@@ -120,26 +177,83 @@ function AccountWorkspace({company,coa,companies,coas,onCompanyChange,onCoaChang
     try {await accountLayerApi.remove(company,coa,level,deleting);setDeleting(null);await load();toast.success('Account deleted.','Deleted')}
     catch(e){setError(message(e))} finally {setDeleteBusy(false)}
   }
+  function openFilters() {
+    setDraftParents([...parents])
+    setFilterOpen(current=>!current)
+  }
+  function applyFilters() {
+    setParents(draftParents.map((value,index)=>index<level-1?value:''))
+    setFilterOpen(false)
+  }
+  useEffect(()=>{
+    if(!filterOpen) return
+    const closeOnOutsideClick=(event:PointerEvent)=>{
+      const target=event.target as Node
+      const element=event.target as Element
+      if(!filterPopoverRef.current?.contains(target) && !element.closest('[data-select-popover]')) setFilterOpen(false)
+    }
+    const closeOnEscape=(event:KeyboardEvent)=>{if(event.key==='Escape') setFilterOpen(false)}
+    document.addEventListener('pointerdown',closeOnOutsideClick)
+    window.addEventListener('keydown',closeOnEscape)
+    return ()=>{
+      document.removeEventListener('pointerdown',closeOnOutsideClick)
+      window.removeEventListener('keydown',closeOnEscape)
+    }
+  },[filterOpen])
+  const activeFilterCount=parents.slice(0,level-1).filter(Boolean).length
+  const selectedCompany=companies.find(item=>item.id===company)
+  const selectedBranch=branches.find(item=>item.id===branchId)
+  const selectedProject=projects.find(item=>String(item.id)===projectId)
+  const selectedFinance=finances.find(item=>String(item.id)===financeId)
+  const selectedComponent=components.find(item=>String(item.id)===componentId)
+  const accountContext:AccountContext={
+    company_code:selectedCompany?.code ?? '',coa_id:coa,branch_code:selectedBranch?.code ?? '',
+    project_code:String(selectedProject?.code ?? ''),finance_code:String(selectedFinance?.code ?? ''),component_code:String(selectedComponent?.code ?? ''),
+  }
+  const contextReady=Object.values(accountContext).every(Boolean)
   return <>
     <div className="rounded-xl border border-[#c2d9d0] bg-[linear-gradient(120deg,rgba(220,240,233,.92),rgba(248,250,244,.96),rgba(246,232,198,.72))] p-4 shadow-sm">
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <SetupFormField label="Company"><SearchableSelect ariaLabel="Company" value={company} onChange={onCompanyChange} options={companies.map(c=>({value:c.id,label:`${c.code} - ${c.legalName}`}))}/></SetupFormField>
         <SetupFormField label="Initial COA"><SearchableSelect ariaLabel="Initial COA" value={coa} onChange={onCoaChange} options={coas.map(c=>({value:String(c.coaId),label:`${formatInitialCoaId(c.coaId)} - ${c.description}`}))}/></SetupFormField>
-        <SetupFormField label="Select account layer"><SearchableSelect ariaLabel="Account layer" value={String(level)} onChange={v=>{setLevel(Number(v));setParents(['','','','']);setQuery('')}} options={layerNames.map((label,i)=>({value:String(i+1),label}))}/></SetupFormField>
-        {Array.from({length:level-1},(_,i)=><SetupFormField key={i} label={layerNames[i] ?? 'Parent'}>
-          <SearchableSelect ariaLabel={`${layerNames[i]} filter`} value={parents[i] ?? ''} disabled={i>0 && !parents[i-1]} onChange={v=>setParents(p=>p.map((x,j)=>j===i?v:j>i?'':x))}
-            options={[{value:'',label:'All'},...(rows[i] ?? []).filter(r=>parents.slice(0,i).every((v,j)=>r[codeKey(j+1)]===v)).map(r=>({value:String(r[codeKey(i+1)]),label:`${r[codeKey(i+1)]} - ${r[descriptionKey(i+1)] ?? ''}`}))]}/>
-        </SetupFormField>)}
+        <SetupFormField label="Branch code"><SearchableSelect ariaLabel="Branch code" value={branchId} onChange={setBranchId} options={branches.map(item=>({value:item.id,label:`${item.code} - ${item.name}`}))}/></SetupFormField>
+        <SetupFormField label="Select account layer"><SearchableSelect ariaLabel="Account layer" value={String(level)} onChange={value=>{setLevel(Number(value));setParents(['','','','']);setQuery('')}} options={layerNames.map((label,index)=>({value:String(index+1),label}))}/></SetupFormField>
+        <SetupFormField label="Project code"><SearchableSelect ariaLabel="Project code" value={projectId} onChange={setProjectId} options={projects.map(item=>({value:String(item.id),label:`${formatCode(item.code)} - ${item.name}`}))}/></SetupFormField>
+        <SetupFormField label="Finance code"><SearchableSelect ariaLabel="Finance code" value={financeId} onChange={setFinanceId} disabled={!projectId} options={finances.map(item=>({value:String(item.id),label:`${formatCode(item.code)} - ${item.name}`}))}/></SetupFormField>
+        <SetupFormField label="Component code"><SearchableSelect ariaLabel="Component code" value={componentId} onChange={setComponentId} disabled={!financeId} options={components.map(item=>({value:String(item.id),label:`${formatCode(item.code)} - ${item.name}`}))}/></SetupFormField>
       </div>
     </div>
+    {contextError && <p role="alert" className="text-red-700">{contextError}</p>}
     {error && !deleting && <p role="alert" className="text-red-700">{error} <button type="button" onClick={()=>void load().catch(e=>setError(message(e)))}>Retry</button></p>}
-    <div className="mt-3 overflow-hidden rounded-2xl border border-[#bfd7ce] bg-white/70 shadow-[0_14px_34px_rgba(39,73,68,.10)]">
+    <div className="mt-3 rounded-2xl border border-[#bfd7ce] bg-white/70 shadow-[0_14px_34px_rgba(39,73,68,.10)]">
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[#cfe0d9] bg-[linear-gradient(100deg,#dcefe8,#eef7f1_58%,#f5e7c5)] px-5 py-4">
         <h2 className="m-0 text-base text-[#173d42]">{layerNames[level-1]} List</h2>
         <div className="flex flex-wrap gap-2">
           <div className="relative"><Search className="absolute top-3.5 left-3 size-4 text-[#71817e]"/><input className={`${setupInputClass} pl-9`} value={query} onChange={e=>setQuery(e.target.value)} aria-label="Search account setup" placeholder="Search codes or names"/></div>
+          <div className="relative" ref={filterPopoverRef}>
+            <Button variant="secondary" onClick={openFilters} aria-expanded={filterOpen} aria-haspopup="dialog" aria-label={activeFilterCount?`Filters, ${activeFilterCount} active`:'Filters'}><span className="flex items-center gap-2"><Filter className="size-4"/>Filters{activeFilterCount>0 && <span className="grid min-w-5 place-items-center rounded-full bg-[#347077] px-1.5 py-0.5 text-xs leading-4 text-white">{activeFilterCount}</span>}</span></Button>
+            {activeFilterCount>0 && <button type="button" aria-label="Clear active filters" title="Clear active filters" onClick={()=>setParents(['','','',''])} className="absolute -top-2 -right-2 grid size-6 cursor-pointer place-items-center rounded-full border-2 border-white bg-[#a94b42] text-white shadow-sm transition hover:bg-[#8f3b34]"><X className="size-3.5" aria-hidden/></button>}
+            {filterOpen && <div role="dialog" aria-label={`Filter ${layerNames[level-1]} accounts`} className="absolute top-[calc(100%+10px)] right-0 z-50 w-[min(24rem,calc(100vw-2rem))] rounded-xl border border-[#c5d8d0] bg-white p-4 text-left shadow-[0_18px_48px_rgba(17,44,46,.22)]">
+              <div className="mb-4 flex items-start justify-between gap-3 border-b border-[#dce8e3] pb-3">
+                <div><h3 className="m-0 text-sm font-semibold text-[#173d42]">Filter {layerNames[level-1]} accounts</h3><p className="m-0 mt-1 text-xs text-[#617774]">Select parent account layers.</p></div>
+                <button type="button" aria-label="Close filters" onClick={()=>setFilterOpen(false)} className="grid size-7 shrink-0 cursor-pointer place-items-center rounded-md text-[#617774] hover:bg-[#e8f1ed] hover:text-[#173d42]"><X className="size-4" aria-hidden/></button>
+              </div>
+              <div className="grid gap-3">
+                {level===1 && <p className="m-0 text-sm text-[#617774]">The Root Layer has no parent-layer filters.</p>}
+                {Array.from({length:level-1},(_,index)=><SetupFormField key={index} label={layerNames[index] ?? 'Parent'}>
+                  <SearchableSelect ariaLabel={`${layerNames[index]} filter`} value={draftParents[index] ?? ''} disabled={index>0 && !draftParents[index-1]}
+                    onChange={value=>setDraftParents(current=>current.map((parent,parentIndex)=>parentIndex===index?value:parentIndex>index?'':parent))}
+                    options={[{value:'',label:'All'},...(rows[index] ?? []).filter(row=>draftParents.slice(0,index).every((parent,parentIndex)=>!parent || row[codeKey(parentIndex+1)]===parent)).map(row=>({value:String(row[codeKey(index+1)]),label:`${row[codeKey(index+1)]} - ${row[descriptionKey(index+1)] ?? ''}`}))]}/>
+                </SetupFormField>)}
+              </div>
+              <div className="-mx-4 -mb-4 mt-4 flex flex-wrap justify-end gap-2 border-t border-[#dce8e3] bg-[#f4f8f6] px-4 py-3">
+                <Button variant="secondary" onClick={()=>setDraftParents(['','','',''])}>Clear</Button>
+                <Button onClick={applyFilters}>Apply</Button>
+              </div>
+            </div>}
+          </div>
           {level===5 && <Button variant="secondary" onClick={()=>setColumnModal(true)}><span className="flex items-center gap-2"><SlidersHorizontal className="size-4"/>Columns</span></Button>}
-          {canEdit && <Button disabled={loading || !!error} onClick={()=>setForm({row:null,level})}><span className="flex items-center gap-2"><Plus className="size-4"/>Add New</span></Button>}
+          {canEdit && <Button disabled={loading || !!error || !contextReady} onClick={()=>setForm({row:null,level})}><span className="flex items-center gap-2"><Plus className="size-4"/>Add New</span></Button>}
         </div>
       </div>
       <div className="p-5"><SkeletonBoundary loading={loading} fallback={<TableSkeleton columns={5} rows={5}/>}><DataTable columns={columns} rows={filtered} rowKey={r=>rowKey(r,level)} emptyMessage="No accounts found for these filters."/></SkeletonBoundary></div>
@@ -155,16 +269,93 @@ function AccountWorkspace({company,coa,companies,coas,onCompanyChange,onCoaChang
       {error && <p role="alert" className="text-red-700">{error}</p>}
       <ModalActions><Button variant="secondary" disabled={deleteBusy} onClick={()=>{setDeleting(null);setError('')}}>Cancel</Button><Button variant="danger" disabled={deleteBusy} onClick={()=>void remove()}>{deleteBusy?'Deleting...':'Delete account'}</Button></ModalActions>
     </Modal>
-    {form && <AccountForm company={company} coa={coa} level={form.level} initial={form.row} rows={rows} parents={parents} reports={reports} categories={categories}
+    {form && (form.row ? <AccountForm company={company} coa={coa} context={accountContext} level={form.level} initial={form.row} rows={rows} parents={parents} reports={reports} categories={categories}
       onCategory={c=>setCategories(old=>[...old,c])} onClose={()=>setForm(null)} onSaved={async()=>{
         setForm(null);toast.success('Account saved.','Saved')
         try {await load()} catch(e) {setError(message(e))}
-      }}/>} 
+      }}/> : <AccountBatchForm company={company} coa={coa} context={accountContext} level={form.level} rows={rows} parents={parents} reports={reports} categories={categories}
+        onClose={()=>setForm(null)} onSaved={async count=>{
+          setForm(null);toast.success(`${count} account record(s) saved.`,'Saved')
+          try {await load()} catch(e) {setError(message(e))}
+        }}/>) }
   </>
 }
 
-function AccountForm({company,coa,level,initial,rows,parents,reports,categories,onCategory,onClose,onSaved}:{
-  company:string;coa:string;level:number;initial:AccountRow|null;rows:AccountRow[][];parents:string[];reports:ReportOption[];categories:Category[];
+function AccountBatchForm({company,coa,context,level,rows,parents,reports,categories,onClose,onSaved}:{
+  company:string;coa:string;context:AccountContext;level:number;rows:AccountRow[][];parents:string[];reports:ReportOption[];categories:Category[];
+  onClose:()=>void;onSaved:(count:number)=>Promise<void>;
+}) {
+  const emptyValues=(copy?:AccountValues):AccountValues=>Object.fromEntries([...keyFields(level),...editableFields(level)].map(field=>[
+    field.key,field.flag?'N':keyFields(level-1).some(key=>key.key===field.key)?copy?.[field.key] ?? parents[Number(field.key[1])-1] ?? '':''
+  ]))
+  const [drafts,setDrafts]=useState<AccountValues[]>(()=>[emptyValues()])
+  const [active,setActive]=useState(0)
+  const [busy,setBusy]=useState(false)
+  const [error,setError]=useState('')
+  const accountKey=(values:AccountValues)=>JSON.stringify(keyFields(level).map(field=>(values[field.key] ?? '').trim().toUpperCase()))
+  const existingKeys=new Set((rows[level-1] ?? []).map(row=>JSON.stringify(keyFields(level).map(field=>String(row[field.key] ?? '').trim().toUpperCase()))))
+  const setDraft=(index:number,values:AccountValues)=>setDrafts(current=>current.map((draft,draftIndex)=>draftIndex===index?values:draft))
+  const validate=(values:AccountValues,index:number)=>{
+    if(keyFields(level).some(field=>!values[field.key]?.trim())) return 'Select all parent layers and enter the account code.'
+    const key=accountKey(values)
+    if(existingKeys.has(key)) return 'This account code already exists in the selected layer.'
+    if(drafts.some((draft,draftIndex)=>draftIndex!==index && accountKey(draft)===key)) return 'This account code is duplicated in the current batch.'
+    return ''
+  }
+  const addAnother=()=>{
+    const currentIndex=active>=0?active:drafts.length-1
+    const problem=validate(drafts[currentIndex]!,currentIndex)
+    if(problem){setError(problem);return}
+    const next=emptyValues(drafts[currentIndex]!)
+    setDrafts(current=>[...current,next]);setActive(drafts.length);setError('')
+  }
+  const removeDraft=(index:number)=>{
+    if(drafts.length===1) return
+    setDrafts(current=>current.filter((_,draftIndex)=>draftIndex!==index))
+    setActive(current=>current===index?-1:current>index?current-1:current)
+    setError('')
+  }
+  const choices=(field:AccountField)=>field.key==='acctype'?accountTypes:field.key==='accgroup'?accountGroups:field.key==='category_code'?categories.map(category=>({value:category.category_code,label:`${category.category_code} - ${category.category_desc}`})):reportChoices(reports,field.reports ?? [])
+  async function save() {
+    for(let index=0;index<drafts.length;index++) {const problem=validate(drafts[index]!,index);if(problem){setActive(index);setError(`Record ${index+1}: ${problem}`);return}}
+    setBusy(true);setError('')
+    try {await accountLayerApi.saveBatch(company,coa,level,drafts.map(values=>({...values,...context})));await onSaved(drafts.length)}
+    catch(reason){setError(message(reason))} finally {setBusy(false)}
+  }
+  return <Modal open title={`Create ${layerNames[level-1]} records`} description="Add multiple records and save them together." onClose={()=>{if(!busy)onClose()}} size="batch">
+    <form onSubmit={event=>{event.preventDefault();void save()}}>
+      <fieldset disabled={busy} className="grid gap-3">
+        {drafts.map((values,index)=><section key={index} className="overflow-hidden rounded-xl border border-[#c7dad2] bg-white/80">
+          <div className="flex items-center justify-between gap-3 bg-[#eef6f2] px-4 py-3 text-sm text-[#173d42]">
+            <button type="button" onClick={()=>setActive(current=>current===index?-1:index)} aria-expanded={active===index} className="flex min-w-0 flex-1 cursor-pointer items-center justify-between gap-3 text-left">
+              <span className="truncate"><strong>Record {index+1}</strong>{values[codeKey(level)] && ` — ${values[codeKey(level)]}`}{values[descriptionKey(level)] && ` · ${values[descriptionKey(level)]}`}</span><span>{active===index?'Close':'Open'}</span>
+            </button>
+            {drafts.length>1 && <button type="button" onClick={()=>removeDraft(index)} className="cursor-pointer rounded-md px-2 py-1 text-[#8f3b34] hover:bg-red-50">Remove</button>}
+          </div>
+          {active===index && <div className="grid gap-4 p-4 md:grid-cols-2">
+            {keyFields(level).map((field,fieldIndex)=><SetupFormField key={field.key} label={field.label}>
+              {fieldIndex===level-1?<SetupInput aria-label={field.label} value={values[field.key] ?? ''} maxLength={field.max} required onChange={event=>setDraft(index,{...values,[field.key]:event.target.value})}/>:
+                <SearchableSelect ariaLabel={field.label} required value={values[field.key] ?? ''} disabled={fieldIndex>0 && !values[codeKey(fieldIndex)]} placeholder="Select parent account"
+                  options={(rows[fieldIndex] ?? []).filter(row=>keyFields(fieldIndex).every(key=>String(row[key.key] ?? '')===values[key.key])).map(row=>({value:String(row[field.key]),label:`${row[field.key]} - ${row[descriptionKey(fieldIndex+1)] ?? ''}`}))}
+                  onChange={value=>setDraft(index,{...values,...Object.fromEntries(keyFields(level-1).filter((_,childIndex)=>childIndex>fieldIndex).map(key=>[key.key,''])),[field.key]:value})}/>}
+            </SetupFormField>)}
+            {editableFields(level).map(field=><SetupFormField key={field.key} label={field.label} fullWidth={field.key===descriptionKey(level)}>
+              {field.flag?<input aria-label={field.label} type="checkbox" className="size-4 accent-[#347077]" checked={values[field.key]==='Y'} onChange={event=>setDraft(index,{...values,[field.key]:event.target.checked?'Y':'N'})}/>:
+                field.reports || ['acctype','accgroup','category_code'].includes(field.key)?<SearchableSelect ariaLabel={field.label} value={values[field.key] ?? ''} options={[{value:'',label:'None'},...choices(field)]} onChange={value=>setDraft(index,{...values,[field.key]:value})}/>:
+                  field.date?<CalendarPicker ariaLabel={field.label} value={values[field.key] ?? ''} onChange={value=>setDraft(index,{...values,[field.key]:value})}/>:
+                  <SetupInput aria-label={field.label} maxLength={field.max} value={values[field.key] ?? ''} onChange={event=>setDraft(index,{...values,[field.key]:event.target.value})}/>}
+            </SetupFormField>)}
+          </div>}
+        </section>)}
+      </fieldset>
+      {error && <p role="alert" className="text-red-700">{error}</p>}
+      <ModalActions><Button type="button" variant="secondary" disabled={busy} onClick={onClose}>Cancel</Button><Button type="button" variant="secondary" disabled={busy} onClick={addAnother}>Add another</Button><Button type="submit" disabled={busy}>{busy?'Saving...':`Save ${drafts.length} record${drafts.length===1?'':'s'}`}</Button></ModalActions>
+    </form>
+  </Modal>
+}
+
+function AccountForm({company,coa,context,level,initial,rows,parents,reports,categories,onCategory,onClose,onSaved}:{
+  company:string;coa:string;context:AccountContext;level:number;initial:AccountRow|null;rows:AccountRow[][];parents:string[];reports:ReportOption[];categories:Category[];
   onCategory:(c:Category)=>void;onClose:()=>void;onSaved:()=>Promise<void>;
 }) {
   const [values,setValues]=useState<AccountValues>(()=>Object.fromEntries([...keyFields(level),...editableFields(level)].map(f=>[f.key,String(initial?.[f.key] ?? (f.flag?'N':keyFields(level-1).some(k=>k.key===f.key)?parents[Number(f.key[1])-1] ?? '':''))])))
@@ -179,7 +370,7 @@ function AccountForm({company,coa,level,initial,rows,parents,reports,categories,
     setError('')
     if(keyFields(level).some(f=>!values[f.key]?.trim())) {setError('Select all parent layers and enter the account code.');return}
     setBusy(true)
-    try {await accountLayerApi.save(company,coa,level,values,!!initial);await onSaved()}
+    try {await accountLayerApi.save(company,coa,level,{...values,...context},!!initial);await onSaved()}
     catch(e){setError(message(e))} finally {setBusy(false)}
   }
   async function addCategory() {

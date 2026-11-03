@@ -2,7 +2,7 @@ import { X } from 'lucide-react'
 import { useEffect, useId, useRef, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 
-type ModalSize = 'medium' | 'large' | 'xlarge'
+type ModalSize = 'medium' | 'large' | 'batch' | 'xlarge'
 
 type ModalProps = {
   open: boolean
@@ -16,6 +16,7 @@ type ModalProps = {
 const sizeClasses: Record<ModalSize, string> = {
   medium: 'sm:w-[560px]',
   large: 'sm:w-[720px]',
+  batch: 'h-[calc(100dvh-16px)] sm:h-[min(760px,calc(100dvh-32px))] sm:w-[920px]',
   xlarge: 'h-[calc(100dvh-16px)] sm:h-[calc(100dvh-32px)] sm:max-h-[820px] sm:w-[1180px]',
 }
 

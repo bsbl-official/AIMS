@@ -45,8 +45,13 @@ public class AccountLayerService {
             UUID actor, boolean update) {
         String table = table(level), company = company(companyId, actor, true);
         requireCoa(coaId);
+        var context = requireContext(companyId, company, coaId, data);
         var keyValues = keyValues(level, data);
         var values = new LinkedHashMap<String, Object>();
+        values.put("branch_code", context.branchCode());
+        values.put("project_code", context.projectCode());
+        values.put("finance_code", context.financeCode());
+        values.put("component_code", context.componentCode());
         for (String field : fields(level)) values.put(field, fieldValue(data, field));
         if (values.get("acctype") != null && !List.of("L", "A", "I", "E").contains(values.get("acctype")))
             throw bad("Account type must be L, A, I, or E");
@@ -81,6 +86,16 @@ public class AccountLayerService {
         }
         audit(companyId, actor, update ? "COA_UPDATED" : "COA_CREATED", coaId, keyValues);
         return response(jdbc.queryForMap("SELECT * FROM " + table + " WHERE " + where(level), scope.toArray()));
+    }
+
+    @Transactional
+    public List<Map<String, Object>> saveBatch(UUID companyId, long coaId, int level,
+            List<Map<String, Object>> records, UUID actor) {
+        if (records == null || records.isEmpty()) throw bad("Add at least one account record");
+        if (records.size() > 100) throw bad("A batch can contain at most 100 account records");
+        var results = new ArrayList<Map<String, Object>>();
+        for (var record : records) results.add(save(companyId, coaId, level, record, actor, false));
+        return results;
     }
 
     @Transactional
@@ -144,6 +159,35 @@ public class AccountLayerService {
             throw bad("Select an existing category");
     }
 
+    private Context requireContext(UUID companyId, String companyCode, long coaId, Map<String, Object> data) {
+        String payloadCompany = text(data, "company_code", 40);
+        long payloadCoa = longValue(data, "coa_id");
+        String branchCode = text(data, "branch_code", 40);
+        int projectCode = integer(data, "project_code");
+        int financeCode = integer(data, "finance_code");
+        int componentCode = integer(data, "component_code");
+        if (!companyCode.equals(payloadCompany) || coaId != payloadCoa)
+            throw bad("Payload company_code and coa_id must match the selected company and Initial COA");
+        Boolean valid = jdbc.queryForObject("""
+                SELECT EXISTS (
+                    SELECT 1 FROM organizations company
+                    JOIN branches branch ON branch.organization_id = company.id
+                        AND branch.code = ? AND branch.status = 'ACTIVE'
+                    JOIN project_codes project ON project.organization_id = company.id
+                        AND project.id = ? AND project.status = 'ACTIVE'
+                    JOIN finance_codes finance ON finance.organization_id = company.id
+                        AND finance.project_code_id = project.id AND finance.id = ? AND finance.status = 'ACTIVE'
+                    JOIN component_codes component ON component.organization_id = company.id
+                        AND component.project_code_id = project.id AND component.finance_code_id = finance.id
+                        AND component.id = ? AND component.status = 'ACTIVE'
+                    WHERE company.id = ? AND company.code = ?
+                )
+                """, Boolean.class, branchCode, projectCode, financeCode, componentCode, companyId, companyCode);
+        if (!Boolean.TRUE.equals(valid))
+            throw bad("Select an active branch, project, finance code, and component code from the same company hierarchy");
+        return new Context(branchCode, projectCode, financeCode, componentCode);
+    }
+
     private Object fieldValue(Map<String, Object> data, String field) {
         int max = field.endsWith("_desc") || field.equals("acchead") ? 100
                 : field.equals("ratio_indicator") ? 20 : field.endsWith("_pk_code") ? 12
@@ -173,6 +217,23 @@ public class AccountLayerService {
         String value = ((String) raw).strip();
         if (value.length() > max) throw bad(field + " must be at most " + max + " characters");
         return value.isEmpty() ? null : value;
+    }
+
+    private static int integer(Map<String, Object> data, String field) {
+        long value = longValue(data, field);
+        if (value > Integer.MAX_VALUE) throw bad(field + " is out of range");
+        return (int) value;
+    }
+
+    private static long longValue(Map<String, Object> data, String field) {
+        Object raw = data.get(field);
+        try {
+            long value = raw instanceof Number number ? number.longValue() : Long.parseLong(String.valueOf(raw).strip());
+            if (value <= 0) throw new NumberFormatException();
+            return value;
+        } catch (RuntimeException exception) {
+            throw bad(field + " must be a positive number");
+        }
     }
 
     private String company(UUID companyId, UUID actor, boolean write) {
@@ -214,4 +275,5 @@ public class AccountLayerService {
     }
     private static ResponseStatusException bad(String message) { return new ResponseStatusException(HttpStatus.BAD_REQUEST, message); }
     private static ResponseStatusException missing(String name) { return new ResponseStatusException(HttpStatus.NOT_FOUND, name + " not found"); }
+    private record Context(String branchCode, int projectCode, int financeCode, int componentCode) {}
 }

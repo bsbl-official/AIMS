@@ -1,5 +1,6 @@
 package com.accountbm.financialstatement.dto;
 
+import com.fasterxml.jackson.annotation.JsonProperty;
 import java.time.Instant;
 import java.util.List;
 
@@ -15,21 +16,45 @@ public final class FinancialStatementDtos {
     public record CreateReportRequest(
             @NotBlank @Size(max = 2) @Pattern(regexp = "[A-Za-z0-9]+", message = "must contain only letters and numbers") String reportCode,
             @NotBlank @Size(max = 100) String reportDescription,
-            @Size(max = 100) String summaryLabel) {}
+            @Size(max = 100) String summaryLabel,
+            @JsonProperty("company_code") @NotBlank @Size(max = 40) String companyCode,
+            @JsonProperty("coa_id") @Positive Long coaId,
+            @JsonProperty("branch_code") @NotBlank @Size(max = 40) String branchCode,
+            @JsonProperty("project_code") @Positive Integer projectCode,
+            @JsonProperty("finance_code") @Positive Integer financeCode,
+            @JsonProperty("component_code") @Positive Integer componentCode) {}
 
     public record UpdateReportRequest(
             @NotBlank @Size(max = 100) String reportDescription,
-            @Size(max = 100) String summaryLabel) {}
+            @Size(max = 100) String summaryLabel,
+            @JsonProperty("company_code") @NotBlank @Size(max = 40) String companyCode,
+            @JsonProperty("coa_id") @Positive Long coaId,
+            @JsonProperty("branch_code") @NotBlank @Size(max = 40) String branchCode,
+            @JsonProperty("project_code") @Positive Integer projectCode,
+            @JsonProperty("finance_code") @Positive Integer financeCode,
+            @JsonProperty("component_code") @Positive Integer componentCode) {}
 
     public record CreateGroupRequest(
             @NotBlank @Size(max = 2) @Pattern(regexp = "[A-Za-z0-9]+", message = "must contain only letters and numbers") String reportCode,
             @NotBlank @Size(max = 3) @Pattern(regexp = "[A-Za-z0-9]+", message = "must contain only letters and numbers") String groupCode,
             @NotBlank @Size(max = 100) String groupDescription,
-            @Size(max = 100) String summaryLabel) {}
+            @Size(max = 100) String summaryLabel,
+            @JsonProperty("company_code") @NotBlank @Size(max = 40) String companyCode,
+            @JsonProperty("coa_id") @Positive Long coaId,
+            @JsonProperty("branch_code") @NotBlank @Size(max = 40) String branchCode,
+            @JsonProperty("project_code") @Positive Integer projectCode,
+            @JsonProperty("finance_code") @Positive Integer financeCode,
+            @JsonProperty("component_code") @Positive Integer componentCode) {}
 
     public record UpdateGroupRequest(
             @NotBlank @Size(max = 100) String groupDescription,
-            @Size(max = 100) String summaryLabel) {}
+            @Size(max = 100) String summaryLabel,
+            @JsonProperty("company_code") @NotBlank @Size(max = 40) String companyCode,
+            @JsonProperty("coa_id") @Positive Long coaId,
+            @JsonProperty("branch_code") @NotBlank @Size(max = 40) String branchCode,
+            @JsonProperty("project_code") @Positive Integer projectCode,
+            @JsonProperty("finance_code") @Positive Integer financeCode,
+            @JsonProperty("component_code") @Positive Integer componentCode) {}
 
     public record CreateLayerRequest(
             @NotBlank @Size(max = 2) @Pattern(regexp = "[A-Za-z0-9]+", message = "must contain only letters and numbers") String reportCode,
@@ -37,12 +62,24 @@ public final class FinancialStatementDtos {
             @NotBlank @Size(max = 3) @Pattern(regexp = "[A-Za-z0-9]+", message = "must contain only letters and numbers") String layerCode,
             @NotBlank @Size(max = 100) String layerDescription,
             @Size(max = 100) String summaryLabel,
-            @Pattern(regexp = "[+-]?", message = "must be + or -") String sign) {}
+            @Pattern(regexp = "[+-]?", message = "must be + or -") String sign,
+            @JsonProperty("company_code") @NotBlank @Size(max = 40) String companyCode,
+            @JsonProperty("coa_id") @Positive Long coaId,
+            @JsonProperty("branch_code") @NotBlank @Size(max = 40) String branchCode,
+            @JsonProperty("project_code") @Positive Integer projectCode,
+            @JsonProperty("finance_code") @Positive Integer financeCode,
+            @JsonProperty("component_code") @Positive Integer componentCode) {}
 
     public record UpdateLayerRequest(
             @NotBlank @Size(max = 100) String layerDescription,
             @Size(max = 100) String summaryLabel,
-            @Pattern(regexp = "[+-]?", message = "must be + or -") String sign) {}
+            @Pattern(regexp = "[+-]?", message = "must be + or -") String sign,
+            @JsonProperty("company_code") @NotBlank @Size(max = 40) String companyCode,
+            @JsonProperty("coa_id") @Positive Long coaId,
+            @JsonProperty("branch_code") @NotBlank @Size(max = 40) String branchCode,
+            @JsonProperty("project_code") @Positive Integer projectCode,
+            @JsonProperty("finance_code") @Positive Integer financeCode,
+            @JsonProperty("component_code") @Positive Integer componentCode) {}
 
     public record CreateSpecificationRequest(
             @NotBlank @Size(max = 2) @Pattern(regexp = "[A-Za-z0-9]+", message = "must contain only letters and numbers") String reportCode,
@@ -68,7 +105,13 @@ public final class FinancialStatementDtos {
             @Size(max = 1) String currentLiabilityFlag,
             @Size(max = 1) String splitFigureFlag,
             @Size(max = 1) String combineFlag,
-            @Size(max = 50) String specificationCodeDummy) {}
+            @Size(max = 50) String specificationCodeDummy,
+            @JsonProperty("company_code") @NotBlank @Size(max = 40) String companyCode,
+            @JsonProperty("coa_id") @Positive Long coaId,
+            @JsonProperty("branch_code") @NotBlank @Size(max = 40) String branchCode,
+            @JsonProperty("project_code") @Positive Integer projectCode,
+            @JsonProperty("finance_code") @Positive Integer financeCode,
+            @JsonProperty("component_code") @Positive Integer componentCode) {}
 
     public record UpdateSpecificationRequest(
             @NotBlank @Size(max = 100) String specificationDescription,
@@ -89,7 +132,13 @@ public final class FinancialStatementDtos {
             @Size(max = 1) String currentLiabilityFlag,
             @Size(max = 1) String splitFigureFlag,
             @Size(max = 1) String combineFlag,
-            @Size(max = 50) String specificationCodeDummy) {}
+            @Size(max = 50) String specificationCodeDummy,
+            @JsonProperty("company_code") @NotBlank @Size(max = 40) String companyCode,
+            @JsonProperty("coa_id") @Positive Long coaId,
+            @JsonProperty("branch_code") @NotBlank @Size(max = 40) String branchCode,
+            @JsonProperty("project_code") @Positive Integer projectCode,
+            @JsonProperty("finance_code") @Positive Integer financeCode,
+            @JsonProperty("component_code") @Positive Integer componentCode) {}
 
     public record ReportResponse(
             String reportCode, String reportDescription, String summaryLabel,

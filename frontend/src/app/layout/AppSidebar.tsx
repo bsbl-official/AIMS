@@ -27,7 +27,12 @@ export function AppSidebar({open, onClose}: { open: boolean; onClose: () => void
             to: '/setup/component-codes',
             label: 'Component setup'
         }] : []),
-        ...(can('coa.read') || can('coa.manage') ? [{to: '/setup/initial-coa', label: 'Initial COA setup'}, {to: '/setup/chart-of-accounts', label: 'Chart of Account setup'}] : []),
+        ...(can('coa.read') || can('coa.manage') ? [{to: '/setup/initial-coa', label: 'Initial COA setup'}] : []),
+        ...(can('financial_statements.read') || can('financial_statements.manage') ? [{
+            to: '/setup/financial-statements',
+            label: 'Financial Statement setup'
+        }] : []),
+        ...(can('coa.read') || can('coa.manage') ? [{to: '/setup/chart-of-accounts', label: 'Chart of Account setup'}] : []),
         ...(isFinancialYearAdmin ? [{
             to: '/setup/financial-year',
             label: 'Financial year setup'
@@ -42,10 +47,6 @@ export function AppSidebar({open, onClose}: { open: boolean; onClose: () => void
         }, {
             to: '/setup/voucher-control',
             label: 'Voucher Control Setup'
-        }] : []),
-        ...(can('financial_statements.read') || can('financial_statements.manage') ? [{
-            to: '/setup/financial-statements',
-            label: 'Financial Statement setup'
         }] : []),
     ]
     const userManagementItems: SidebarMenuItem[] = [

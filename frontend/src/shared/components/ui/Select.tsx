@@ -83,7 +83,7 @@ export function Select({
     setActiveIndex(next)
   }
 
-  const menu = open && position && <div className="fixed z-[100] overflow-hidden rounded-xl border border-[#d5ded9] bg-white p-1.5 shadow-[0_16px_42px_rgba(17,44,46,.18)]" ref={contentRef} style={position}>
+  const menu = open && position && <div className="fixed z-[100] overflow-hidden rounded-xl border border-[#d5ded9] bg-white p-1.5 shadow-[0_16px_42px_rgba(17,44,46,.18)]" data-select-popover ref={contentRef} style={position}>
     {searchable && <div className="mb-1 flex items-center gap-2 rounded-lg bg-[#f2f5f3] px-2.5">
       <Search className="size-4 shrink-0 text-[#778783]" aria-hidden />
       <input aria-label={`Search ${ariaLabel ?? 'options'}`} className="min-w-0 flex-1 border-0 bg-transparent py-2.5 text-[13px] text-[#203236] outline-none placeholder:text-[#899691]"

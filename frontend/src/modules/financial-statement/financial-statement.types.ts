@@ -52,6 +52,15 @@ export type ReportFormValues = { reportCode: string; reportDescription: string; 
 export type GroupFormValues = { groupCode: string; groupDescription: string; summaryLabel: string }
 export type LayerFormValues = { layerCode: string; layerDescription: string; summaryLabel: string; sign: string }
 
+export type FinancialStatementContext = {
+  company_code: string
+  coa_id: string
+  branch_code: string
+  project_code: string
+  finance_code: string
+  component_code: string
+}
+
 export type SpecificationFormValues = {
   specificationCode: string
   specificationDescription: string
