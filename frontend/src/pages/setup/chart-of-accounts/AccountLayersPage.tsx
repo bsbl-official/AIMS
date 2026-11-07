@@ -1,5 +1,5 @@
 import { Eye, Filter, Pencil, Plus, Search, SlidersHorizontal, Trash2, X } from 'lucide-react'
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from 'react'
 import { useAuth } from '../../../modules/auth/hooks/useAuth'
 import { branchApi } from '../../../modules/branch/api/branch.api'
 import type { Branch } from '../../../modules/branch/branch.types'
@@ -26,13 +26,33 @@ import { SkeletonBoundary, TableSkeleton } from '../../../shared/components/Skel
 import { TableActionButton } from '../../../shared/components/TableActionButton'
 import { SetupFormField, SetupInput, setupInputClass } from '../../../shared/components/forms/SetupFormField'
 import { formatCode } from '../../../shared/utils/formatCode'
+import { useOrganizationContext } from '../../../modules/organization-context/useOrganizationContext'
 
 const message = (error: unknown) => error instanceof Error ? error.message : 'Unable to complete the request.'
 const crumbs = [{label:'Dashboard',to:'/'},{label:'Setup'},{label:'Chart of Account setup'}]
 type AccountContext = {company_code:string;coa_id:string;branch_code:string;project_code:string;finance_code:string;component_code:string}
+const isClassificationField = (field:AccountField) => field.key==='acctype' || field.key==='accgroup'
+const classificationFields = (level:number) => editableFields(level).filter(isClassificationField)
+const detailFields = (level:number) => editableFields(level).filter(field=>!isClassificationField(field))
+const selectedControl = (rows:AccountRow[][],parents:string[]) => parents[2] ? (rows[2] ?? []).find(row=>
+  [0,1,2].every(index=>!parents[index] || String(row[codeKey(index+1)] ?? '')===parents[index])) : undefined
+
+function focusNextFieldOnEnter(event: ReactKeyboardEvent<HTMLFormElement>) {
+  if (event.key !== 'Enter' || event.shiftKey || event.ctrlKey || event.altKey || event.metaKey || event.nativeEvent.isComposing) return
+  const target=event.target
+  if (!(target instanceof HTMLInputElement) || ['checkbox','radio','button','submit'].includes(target.type) || target.closest('[data-select-popover]')) return
+  const scope=target.closest<HTMLElement>('[data-enter-navigation]')
+  if (!scope) return
+  const fields=Array.from(scope.querySelectorAll<HTMLElement>('input:not([type="hidden"]):not(:disabled), button[aria-haspopup="listbox"]:not(:disabled)'))
+    .filter(field=>field.offsetParent!==null)
+  const next=fields[fields.indexOf(target)+1]
+  event.preventDefault()
+  next?.focus()
+}
 
 export function AccountLayersPage() {
   const {can,user} = useAuth()
+  const {companyId:globalCompanyId}=useOrganizationContext()
   const canView = can('coa.read') || can('coa.manage')
   const [companies,setCompanies] = useState<Company[]>([])
   const [coas,setCoas] = useState<InitialCoa[]>([])
@@ -46,25 +66,26 @@ export function AccountLayersPage() {
     Promise.all([companyApi.companies(),initialCoaApi.list()]).then(([c,a])=>{
       if (!active) return
       setCompanies(c); setCoas(a)
-      setCompany(c.find(x=>x.id===user?.organizations[0]?.organizationId)?.id ?? c[0]?.id ?? '')
+      setCompany(globalCompanyId)
       setCoa(String(a[0]?.coaId ?? '')); setReady(true)
     }).catch(e=>{if(active) setError(message(e))})
     return ()=>{active=false}
-  },[canView,user])
+  },[canView,globalCompanyId,user])
   if (!canView) return <PageContainer title="Access denied" breadcrumbs={crumbs}><Card>You do not have access to Chart of Account setup.</Card></PageContainer>
   return <PageContainer title="Chart of Account setup" breadcrumbs={crumbs}>
     {error && <p role="alert" className="text-red-700">{error}</p>}
     {ready && (!company || !coa) && <Card>Create a company and an Initial COA before adding account layers.</Card>}
     {!ready && !error && <TableSkeleton columns={5} rows={5}/>}
     {company && coa && <AccountWorkspace key={`${company}:${coa}`} company={company} coa={coa} companies={companies} coas={coas}
-      onCompanyChange={setCompany} onCoaChange={setCoa} userId={user?.id ?? ''} canEdit={can('coa.manage')}/>}
+      onCoaChange={setCoa} userId={user?.id ?? ''} canEdit={can('coa.manage')}/>}
   </PageContainer>
 }
 
-function AccountWorkspace({company,coa,companies,coas,onCompanyChange,onCoaChange,userId,canEdit}:{
-  company:string;coa:string;companies:Company[];coas:InitialCoa[];onCompanyChange:(value:string)=>void;onCoaChange:(value:string)=>void;userId:string;canEdit:boolean;
+function AccountWorkspace({company,coa,companies,coas,onCoaChange,userId,canEdit}:{
+  company:string;coa:string;companies:Company[];coas:InitialCoa[];onCoaChange:(value:string)=>void;userId:string;canEdit:boolean;
 }) {
   const toast=useToast()
+  const {branchId:globalBranchId}=useOrganizationContext()
   const [level,setLevel]=useState(1)
   const [rows,setRows]=useState<AccountRow[][]>([[],[],[],[],[]])
   const [reports,setReports]=useState<ReportOption[]>([])
@@ -121,11 +142,11 @@ function AccountWorkspace({company,coa,companies,coas,onCompanyChange,onCoaChang
       const activeBranches=nextBranches.filter(item=>item.status==='ACTIVE')
       const activeProjects=nextProjects.filter(item=>item.status==='ACTIVE')
       setBranches(activeBranches);setProjects(activeProjects)
-      setBranchId(activeBranches[0]?.id ?? '')
+      setBranchId(activeBranches.some(item=>item.id===globalBranchId)?globalBranchId:activeBranches[0]?.id ?? '')
       setProjectId(String(activeProjects[0]?.id ?? ''))
     }).catch(reason=>{if(active) setContextError(message(reason))})
     return ()=>{active=false}
-  },[company])
+  },[company,globalBranchId])
   useEffect(()=>{
     let active=true
     setFinances([]);setComponents([]);setFinanceId('');setComponentId('')
@@ -214,9 +235,7 @@ function AccountWorkspace({company,coa,companies,coas,onCompanyChange,onCoaChang
   return <>
     <div className="rounded-xl border border-[#c2d9d0] bg-[linear-gradient(120deg,rgba(220,240,233,.92),rgba(248,250,244,.96),rgba(246,232,198,.72))] p-4 shadow-sm">
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        <SetupFormField label="Company"><SearchableSelect ariaLabel="Company" value={company} onChange={onCompanyChange} options={companies.map(c=>({value:c.id,label:`${c.code} - ${c.legalName}`}))}/></SetupFormField>
         <SetupFormField label="Initial COA"><SearchableSelect ariaLabel="Initial COA" value={coa} onChange={onCoaChange} options={coas.map(c=>({value:String(c.coaId),label:`${formatInitialCoaId(c.coaId)} - ${c.description}`}))}/></SetupFormField>
-        <SetupFormField label="Branch code"><SearchableSelect ariaLabel="Branch code" value={branchId} onChange={setBranchId} options={branches.map(item=>({value:item.id,label:`${item.code} - ${item.name}`}))}/></SetupFormField>
         <SetupFormField label="Select account layer"><SearchableSelect ariaLabel="Account layer" value={String(level)} onChange={value=>{setLevel(Number(value));setParents(['','','','']);setQuery('')}} options={layerNames.map((label,index)=>({value:String(index+1),label}))}/></SetupFormField>
         <SetupFormField label="Project code"><SearchableSelect ariaLabel="Project code" value={projectId} onChange={setProjectId} options={projects.map(item=>({value:String(item.id),label:`${formatCode(item.code)} - ${item.name}`}))}/></SetupFormField>
         <SetupFormField label="Finance code"><SearchableSelect ariaLabel="Finance code" value={financeId} onChange={setFinanceId} disabled={!projectId} options={finances.map(item=>({value:String(item.id),label:`${formatCode(item.code)} - ${item.name}`}))}/></SetupFormField>
@@ -285,8 +304,10 @@ function AccountBatchForm({company,coa,context,level,rows,parents,reports,catego
   company:string;coa:string;context:AccountContext;level:number;rows:AccountRow[][];parents:string[];reports:ReportOption[];categories:Category[];
   onClose:()=>void;onSaved:(count:number)=>Promise<void>;
 }) {
+  const parentControl=selectedControl(rows,parents)
   const emptyValues=(copy?:AccountValues):AccountValues=>Object.fromEntries([...keyFields(level),...editableFields(level)].map(field=>[
-    field.key,field.flag?'N':keyFields(level-1).some(key=>key.key===field.key)?copy?.[field.key] ?? parents[Number(field.key[1])-1] ?? '':''
+    field.key,field.flag?'N':isClassificationField(field)?copy?.[field.key] ?? String(parentControl?.[field.key] ?? ''):
+      keyFields(level-1).some(key=>key.key===field.key)?copy?.[field.key] ?? parents[Number(field.key[1])-1] ?? '':''
   ]))
   const [drafts,setDrafts]=useState<AccountValues[]>(()=>[emptyValues()])
   const [active,setActive]=useState(0)
@@ -296,6 +317,7 @@ function AccountBatchForm({company,coa,context,level,rows,parents,reports,catego
   const existingKeys=new Set((rows[level-1] ?? []).map(row=>JSON.stringify(keyFields(level).map(field=>String(row[field.key] ?? '').trim().toUpperCase()))))
   const setDraft=(index:number,values:AccountValues)=>setDrafts(current=>current.map((draft,draftIndex)=>draftIndex===index?values:draft))
   const validate=(values:AccountValues,index:number)=>{
+    if(level>=3 && (!values.acctype?.trim() || !values.accgroup?.trim())) return 'Select an account type and account group.'
     if(keyFields(level).some(field=>!values[field.key]?.trim())) return 'Select all parent layers and enter the account code.'
     const key=accountKey(values)
     if(existingKeys.has(key)) return 'This account code already exists in the selected layer.'
@@ -303,7 +325,7 @@ function AccountBatchForm({company,coa,context,level,rows,parents,reports,catego
     return ''
   }
   const addAnother=()=>{
-    const currentIndex=active>=0?active:drafts.length-1
+    const currentIndex=active
     const problem=validate(drafts[currentIndex]!,currentIndex)
     if(problem){setError(problem);return}
     const next=emptyValues(drafts[currentIndex]!)
@@ -312,10 +334,22 @@ function AccountBatchForm({company,coa,context,level,rows,parents,reports,catego
   const removeDraft=(index:number)=>{
     if(drafts.length===1) return
     setDrafts(current=>current.filter((_,draftIndex)=>draftIndex!==index))
-    setActive(current=>current===index?-1:current>index?current-1:current)
+    setActive(current=>current===index?Math.min(index,drafts.length-2):current>index?current-1:current)
     setError('')
   }
   const choices=(field:AccountField)=>field.key==='acctype'?accountTypes:field.key==='accgroup'?accountGroups:field.key==='category_code'?categories.map(category=>({value:category.category_code,label:`${category.category_code} - ${category.category_desc}`})):reportChoices(reports,field.reports ?? [])
+  const setClassification=(index:number,values:AccountValues,key:string,value:string)=>setDraft(index,{
+    ...values,[key]:value,
+    ...Object.fromEntries(keyFields(level-1).filter((_,fieldIndex)=>fieldIndex>=2).map(field=>[field.key,''])),
+  })
+  const renderKeyField=(field:AccountField,fieldIndex:number,index:number,values:AccountValues)=><SetupFormField key={field.key} label={field.label}>
+    {fieldIndex===level-1?<SetupInput aria-label={field.label} value={values[field.key] ?? ''} maxLength={field.max} required onChange={event=>setDraft(index,{...values,[field.key]:event.target.value})}/>:
+      <SearchableSelect ariaLabel={field.label} required value={values[field.key] ?? ''} disabled={(fieldIndex>0 && !values[codeKey(fieldIndex)]) || (level>3 && fieldIndex===2 && (!values.acctype || !values.accgroup))} placeholder="Select parent account"
+        options={(rows[fieldIndex] ?? []).filter(row=>keyFields(fieldIndex).every(key=>String(row[key.key] ?? '')===values[key.key]))
+          .filter(row=>level<=3 || fieldIndex!==2 || (row.acctype===values.acctype && row.accgroup===values.accgroup))
+          .map(row=>({value:String(row[field.key]),label:`${row[field.key]} - ${row[descriptionKey(fieldIndex+1)] ?? ''}`}))}
+        onChange={value=>setDraft(index,{...values,...Object.fromEntries(keyFields(level-1).filter((_,childIndex)=>childIndex>fieldIndex).map(key=>[key.key,''])),[field.key]:value})}/>}
+  </SetupFormField>
   async function save() {
     for(let index=0;index<drafts.length;index++) {const problem=validate(drafts[index]!,index);if(problem){setActive(index);setError(`Record ${index+1}: ${problem}`);return}}
     setBusy(true);setError('')
@@ -323,33 +357,47 @@ function AccountBatchForm({company,coa,context,level,rows,parents,reports,catego
     catch(reason){setError(message(reason))} finally {setBusy(false)}
   }
   return <Modal open title={`Create ${layerNames[level-1]} records`} description="Add multiple records and save them together." onClose={()=>{if(!busy)onClose()}} size="batch">
-    <form onSubmit={event=>{event.preventDefault();void save()}}>
+    <form onKeyDown={focusNextFieldOnEnter} onSubmit={event=>{event.preventDefault();void save()}}>
       <fieldset disabled={busy} className="grid gap-3">
         {drafts.map((values,index)=><section key={index} className="overflow-hidden rounded-xl border border-[#c7dad2] bg-white/80">
           <div className="flex items-center justify-between gap-3 bg-[#eef6f2] px-4 py-3 text-sm text-[#173d42]">
-            <button type="button" onClick={()=>setActive(current=>current===index?-1:index)} aria-expanded={active===index} className="flex min-w-0 flex-1 cursor-pointer items-center justify-between gap-3 text-left">
-              <span className="truncate"><strong>Record {index+1}</strong>{values[codeKey(level)] && ` — ${values[codeKey(level)]}`}{values[descriptionKey(level)] && ` · ${values[descriptionKey(level)]}`}</span><span>{active===index?'Close':'Open'}</span>
+            <button type="button" onClick={()=>setActive(index)} aria-expanded={active===index} aria-label={active===index?`Editing record ${index+1}`:`Open record ${index+1}`} title={active===index?'Editing':'Open record'} className="flex min-w-0 flex-1 cursor-pointer items-center justify-between gap-3 text-left">
+              <span className="truncate"><strong>Record {index+1}</strong>{values[codeKey(level)] && ` — ${values[codeKey(level)]}`}{values[descriptionKey(level)] && ` · ${values[descriptionKey(level)]}`}</span>
+              <span className={`grid size-8 shrink-0 place-items-center rounded-lg ${active===index?'bg-[#dcece6] text-[#285d5e]':'text-[#52716b] transition hover:bg-[#dcece6] hover:text-[#285d5e]'}`} aria-hidden>
+                {active===index?<Pencil className="size-4"/>:<Eye className="size-4"/>}
+              </span>
             </button>
-            {drafts.length>1 && <button type="button" onClick={()=>removeDraft(index)} className="cursor-pointer rounded-md px-2 py-1 text-[#8f3b34] hover:bg-red-50">Remove</button>}
+            {drafts.length>1 && <button type="button" onClick={()=>removeDraft(index)} aria-label={`Remove record ${index+1}`} title="Remove record" className="grid size-8 shrink-0 cursor-pointer place-items-center rounded-lg text-[#a94b42] transition hover:bg-red-50 hover:text-[#8f3b34]"><Trash2 className="size-4" aria-hidden/></button>}
           </div>
-          {active===index && <div className="grid gap-4 p-4 md:grid-cols-2">
-            {keyFields(level).map((field,fieldIndex)=><SetupFormField key={field.key} label={field.label}>
-              {fieldIndex===level-1?<SetupInput aria-label={field.label} value={values[field.key] ?? ''} maxLength={field.max} required onChange={event=>setDraft(index,{...values,[field.key]:event.target.value})}/>:
-                <SearchableSelect ariaLabel={field.label} required value={values[field.key] ?? ''} disabled={fieldIndex>0 && !values[codeKey(fieldIndex)]} placeholder="Select parent account"
-                  options={(rows[fieldIndex] ?? []).filter(row=>keyFields(fieldIndex).every(key=>String(row[key.key] ?? '')===values[key.key])).map(row=>({value:String(row[field.key]),label:`${row[field.key]} - ${row[descriptionKey(fieldIndex+1)] ?? ''}`}))}
-                  onChange={value=>setDraft(index,{...values,...Object.fromEntries(keyFields(level-1).filter((_,childIndex)=>childIndex>fieldIndex).map(key=>[key.key,''])),[field.key]:value})}/>}
+          {active===index && <div className="grid gap-4 p-4 md:grid-cols-3" data-enter-navigation>
+            {keyFields(level).slice(0,2).map((field,fieldIndex)=>renderKeyField(field,fieldIndex,index,values))}
+            {level>=3 && classificationFields(level).map(field=><SetupFormField key={field.key} label={field.label}>
+              <SearchableSelect ariaLabel={field.label} required value={values[field.key] ?? ''} placeholder={`Select ${field.label.toLowerCase()}`}
+                options={choices(field)} onChange={value=>setClassification(index,values,field.key,value)}/>
             </SetupFormField>)}
-            {editableFields(level).map(field=><SetupFormField key={field.key} label={field.label} fullWidth={field.key===descriptionKey(level)}>
-              {field.flag?<input aria-label={field.label} type="checkbox" className="size-4 accent-[#347077]" checked={values[field.key]==='Y'} onChange={event=>setDraft(index,{...values,[field.key]:event.target.checked?'Y':'N'})}/>:
-                field.reports || ['acctype','accgroup','category_code'].includes(field.key)?<SearchableSelect ariaLabel={field.label} value={values[field.key] ?? ''} options={[{value:'',label:'None'},...choices(field)]} onChange={value=>setDraft(index,{...values,[field.key]:value})}/>:
+            {keyFields(level).slice(2).map((field,indexAfterGroup)=>renderKeyField(field,indexAfterGroup+2,index,values))}
+            {(level>=3?detailFields(level):editableFields(level)).map(field=>field.flag?<FlagCheckbox key={field.key} label={field.label} checked={values[field.key]==='Y'} onChange={checked=>setDraft(index,{...values,[field.key]:checked?'Y':'N'})}/>:<SetupFormField key={field.key} label={field.label}>
+              {
+                field.reports || ['acctype','accgroup','category_code'].includes(field.key)?<SearchableSelect ariaLabel={field.label} required={isClassificationField(field)} value={values[field.key] ?? ''} options={isClassificationField(field)?choices(field):[{value:'',label:'None'},...choices(field)]} onChange={value=>setDraft(index,{...values,[field.key]:value})}/>:
                   field.date?<CalendarPicker ariaLabel={field.label} value={values[field.key] ?? ''} onChange={value=>setDraft(index,{...values,[field.key]:value})}/>:
                   <SetupInput aria-label={field.label} maxLength={field.max} value={values[field.key] ?? ''} onChange={event=>setDraft(index,{...values,[field.key]:event.target.value})}/>}
             </SetupFormField>)}
           </div>}
         </section>)}
       </fieldset>
+      <button
+        type="button"
+        disabled={busy}
+        onClick={addAnother}
+        className="mt-3 flex w-full cursor-pointer items-center justify-center gap-2 rounded-lg border border-dashed border-[#abc5ba] bg-white/55 py-2.5 text-sm text-[#315f5c] transition hover:bg-[#eaf3ef] disabled:cursor-not-allowed disabled:opacity-50"
+      >
+        <Plus className="size-4" aria-hidden />
+        Add Another Record
+      </button>
       {error && <p role="alert" className="text-red-700">{error}</p>}
-      <ModalActions><Button type="button" variant="secondary" disabled={busy} onClick={onClose}>Cancel</Button><Button type="button" variant="secondary" disabled={busy} onClick={addAnother}>Add another</Button><Button type="submit" disabled={busy}>{busy?'Saving...':`Save ${drafts.length} record${drafts.length===1?'':'s'}`}</Button></ModalActions>
+      <div className="mt-4 flex justify-end">
+        <Button type="submit" disabled={busy}>{busy?'Saving...':'Save'}</Button>
+      </div>
     </form>
   </Modal>
 }
@@ -358,7 +406,11 @@ function AccountForm({company,coa,context,level,initial,rows,parents,reports,cat
   company:string;coa:string;context:AccountContext;level:number;initial:AccountRow|null;rows:AccountRow[][];parents:string[];reports:ReportOption[];categories:Category[];
   onCategory:(c:Category)=>void;onClose:()=>void;onSaved:()=>Promise<void>;
 }) {
-  const [values,setValues]=useState<AccountValues>(()=>Object.fromEntries([...keyFields(level),...editableFields(level)].map(f=>[f.key,String(initial?.[f.key] ?? (f.flag?'N':keyFields(level-1).some(k=>k.key===f.key)?parents[Number(f.key[1])-1] ?? '':''))])))
+  const parentControl=selectedControl(rows,parents)
+  const [values,setValues]=useState<AccountValues>(()=>Object.fromEntries([...keyFields(level),...editableFields(level)].map(f=>[
+    f.key,String(initial?.[f.key] ?? (f.flag?'N':isClassificationField(f)?parentControl?.[f.key] ?? '':
+      keyFields(level-1).some(k=>k.key===f.key)?parents[Number(f.key[1])-1] ?? '':'')),
+  ])))
   const [busy,setBusy]=useState(false)
   const [error,setError]=useState('')
   const [newCategory,setNewCategory]=useState(false)
@@ -368,6 +420,7 @@ function AccountForm({company,coa,context,level,initial,rows,parents,reports,cat
   const set=(key:string,value:string)=>setValues(v=>({...v,[key]:value}))
   async function save() {
     setError('')
+    if(level>=3 && (!values.acctype?.trim() || !values.accgroup?.trim())) {setError('Select an account type and account group.');return}
     if(keyFields(level).some(f=>!values[f.key]?.trim())) {setError('Select all parent layers and enter the account code.');return}
     setBusy(true)
     try {await accountLayerApi.save(company,coa,level,{...values,...context},!!initial);await onSaved()}
@@ -380,18 +433,30 @@ function AccountForm({company,coa,context,level,initial,rows,parents,reports,cat
     catch(e){setError(message(e))} finally {setBusy(false)}
   }
   const choices=(f:AccountField)=>f.key==='acctype'?accountTypes:f.key==='accgroup'?accountGroups:f.key==='category_code'?categories.map(c=>({value:c.category_code,label:`${c.category_code} - ${c.category_desc}`})):reportChoices(reports,f.reports ?? [])
+  const setClassification=(key:string,value:string)=>setValues(old=>({
+    ...old,[key]:value,
+    ...Object.fromEntries(keyFields(level-1).filter((_,fieldIndex)=>fieldIndex>=2).map(field=>[field.key,''])),
+  }))
+  const renderKeyField=(f:AccountField,i:number)=><SetupFormField key={f.key} label={f.label}>
+    {i===level-1 || initial?<SetupInput aria-label={f.label} value={values[f.key] ?? ''} maxLength={f.max} required disabled={!!initial} onChange={e=>set(f.key,e.target.value)}/>:
+      <SearchableSelect ariaLabel={f.label} required value={values[f.key] ?? ''} disabled={(i>0 && !values[codeKey(i)]) || (level>3 && i===2 && (!values.acctype || !values.accgroup))} placeholder="Select parent account"
+        options={(rows[i] ?? []).filter(r=>keyFields(i).every(k=>r[k.key]===values[k.key]))
+          .filter(r=>level<=3 || i!==2 || (r.acctype===values.acctype && r.accgroup===values.accgroup))
+          .map(r=>({value:String(r[f.key]),label:`${r[f.key]} - ${r[descriptionKey(i+1)] ?? ''}`}))}
+        onChange={v=>setValues(old=>({...old,...Object.fromEntries(keyFields(level-1).filter((_,j)=>j>i).map(k=>[k.key,''])),[f.key]:v}))}/>}
+  </SetupFormField>
   return <Modal open title={initial ? `Edit ${layerNames[level-1]}` : `Create New ${layerNames[level-1]}`} onClose={closeForm}>
-    <form onSubmit={e=>{e.preventDefault();void save()}} className="grid gap-4 md:grid-cols-2">
+    <form onKeyDown={focusNextFieldOnEnter} onSubmit={e=>{e.preventDefault();void save()}} className="grid gap-4 md:grid-cols-2" data-enter-navigation>
       <fieldset disabled={busy} className="contents">
-        {keyFields(level).map((f,i)=><SetupFormField key={f.key} label={f.label}>
-          {i===level-1 || initial?<SetupInput aria-label={f.label} value={values[f.key] ?? ''} maxLength={f.max} required disabled={!!initial} onChange={e=>set(f.key,e.target.value)}/>:
-            <SearchableSelect ariaLabel={f.label} required value={values[f.key] ?? ''} disabled={i>0 && !values[codeKey(i)]} placeholder="Select parent account"
-              options={(rows[i] ?? []).filter(r=>keyFields(i).every(k=>r[k.key]===values[k.key])).map(r=>({value:String(r[f.key]),label:`${r[f.key]} - ${r[descriptionKey(i+1)] ?? ''}`}))}
-              onChange={v=>setValues(old=>({...old,...Object.fromEntries(keyFields(level-1).filter((_,j)=>j>i).map(k=>[k.key,''])),[f.key]:v}))}/>}
+        {keyFields(level).slice(0,2).map((f,i)=>renderKeyField(f,i))}
+        {level>=3 && classificationFields(level).map(f=><SetupFormField key={f.key} label={f.label}>
+          <SearchableSelect ariaLabel={f.label} required value={values[f.key] ?? ''} disabled={!!initial && level>3} placeholder={`Select ${f.label.toLowerCase()}`}
+            options={choices(f)} onChange={v=>setClassification(f.key,v)}/>
         </SetupFormField>)}
-        {editableFields(level).map(f=><SetupFormField key={f.key} label={f.label} fullWidth={f.key===descriptionKey(level)}>
-          {f.flag?<input aria-label={f.label} type="checkbox" className="size-4 accent-[#347077]" checked={values[f.key]==='Y'} onChange={e=>set(f.key,e.target.checked?'Y':'N')}/>:
-            f.reports || ['acctype','accgroup','category_code'].includes(f.key)?<SearchableSelect ariaLabel={f.label} value={values[f.key] ?? ''} options={[{value:'',label:'None'},...choices(f)]} onChange={v=>set(f.key,v)}/>:
+        {keyFields(level).slice(2).map((f,indexAfterGroup)=>renderKeyField(f,indexAfterGroup+2))}
+        {(level>=3?detailFields(level):editableFields(level)).map(f=>f.flag?<FlagCheckbox key={f.key} label={f.label} checked={values[f.key]==='Y'} onChange={checked=>set(f.key,checked?'Y':'N')}/>:<SetupFormField key={f.key} label={f.label}>
+          {
+            f.reports || ['acctype','accgroup','category_code'].includes(f.key)?<SearchableSelect ariaLabel={f.label} required={isClassificationField(f)} value={values[f.key] ?? ''} options={isClassificationField(f)?choices(f):[{value:'',label:'None'},...choices(f)]} onChange={v=>set(f.key,v)}/>:
               f.date?<CalendarPicker ariaLabel={f.label} value={values[f.key] ?? ''} onChange={v=>set(f.key,v)}/>:
               <SetupInput aria-label={f.label} type="text" maxLength={f.max} value={values[f.key] ?? ''} onChange={e=>set(f.key,e.target.value)}/>}
         </SetupFormField>)}
@@ -404,4 +469,11 @@ function AccountForm({company,coa,context,level,initial,rows,parents,reports,cat
     <ModalActions><Button type="button" variant="secondary" disabled={busy} onClick={onClose}>Cancel</Button><Button type="submit" disabled={busy}>{busy?'Saving...':'Save'}</Button></ModalActions>
     </form>
   </Modal>
+}
+
+function FlagCheckbox({label,checked,onChange}:{label:string;checked:boolean;onChange:(checked:boolean)=>void}) {
+  return <label className="flex min-h-[42px] self-end items-center justify-between rounded-lg border border-[#ccd5d0] bg-white px-3 py-[11px] text-[13px] font-medium text-[#405653] focus-within:border-[#347077] focus-within:shadow-[0_0_0_3px_rgba(52,112,119,.12)]">
+    <span>{label}</span>
+    <input aria-label={label} type="checkbox" className="size-4 accent-[#347077]" checked={checked} onChange={event=>onChange(event.target.checked)}/>
+  </label>
 }

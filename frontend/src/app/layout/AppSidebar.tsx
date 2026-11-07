@@ -5,13 +5,14 @@ import {Brand} from '../../shared/components/Brand'
 import {SidebarMenuGroup, type SidebarMenuItem} from './SidebarMenuGroup'
 import {SidebarSignOut} from './SidebarSignOut'
 
-const transactionItems: SidebarMenuItem[] = [
-    {to: '/journals', label: 'Journal vouchers'},
-]
-
 export function AppSidebar({open, onClose}: { open: boolean; onClose: () => void }) {
     const {can, user} = useAuth()
     const isFinancialYearAdmin = Boolean(user?.superAdmin || user?.organizations.some((organization) => organization.roles.includes('COMPANY_ADMIN')))
+    const transactionItems: SidebarMenuItem[] = can('journal.read') || can('journal.create') ? [
+        {to: '/transactions/debit-vouchers', label: 'Debit Voucher'},
+        {to: '/transactions/credit-vouchers', label: 'Credit Voucher'},
+        {to: '/transactions/journal-vouchers', label: 'Journal Voucher'},
+    ] : []
     const setupItems: SidebarMenuItem[] = [
         ...(can('companies.read') || can('companies.manage') ? [{to: '/setup/company', label: 'Company setup'}] : []),
         ...(can('branches.read') || can('branches.manage') ? [{to: '/setup/branches', label: 'Branch setup'}] : []),
@@ -58,8 +59,8 @@ export function AppSidebar({open, onClose}: { open: boolean; onClose: () => void
     ]
 
     return <aside
-        className={`fixed inset-y-0 left-0 z-40 flex w-[280px] flex-col overflow-y-auto bg-[#132a2f] px-5 pt-6 pb-5 text-[#eef3ed] shadow-[18px_0_48px_rgba(8,28,31,.24)] transition-transform duration-200 lg:static lg:z-auto lg:w-auto lg:min-h-screen lg:translate-x-0 lg:pt-8 lg:shadow-none ${open ? 'translate-x-0' : '-translate-x-full'}`}>
-        <div className="relative -mx-5 -mt-6 mb-5 flex h-[72px] items-center justify-center bg-[#132a2f] px-6 py-1 lg:-mt-8">
+        className={`fixed inset-y-0 left-0 z-40 flex w-[280px] flex-col overflow-y-auto overscroll-contain bg-[#132a2f] px-5 pt-6 pb-5 text-[#eef3ed] shadow-[18px_0_48px_rgba(8,28,31,.24)] transition-transform duration-200 lg:sticky lg:inset-y-auto lg:top-0 lg:z-auto lg:h-screen lg:w-auto lg:self-start lg:translate-x-0 lg:pt-8 lg:shadow-none ${open ? 'translate-x-0' : '-translate-x-full'}`}>
+        <div className="relative -mx-5 -mt-6 mb-2 flex h-14 items-center justify-center bg-[#132a2f] px-5 lg:-mt-8">
             <Brand/>
             <button
                 className="absolute top-3 right-3 grid size-9 cursor-pointer place-items-center rounded-lg border border-[#d1d9d5] bg-white text-[#29474c] hover:bg-[#edf3f0] lg:hidden"
@@ -81,7 +82,7 @@ export function AppSidebar({open, onClose}: { open: boolean; onClose: () => void
             {userManagementItems.length > 0 &&
                 <SidebarMenuGroup label="User Management" icon={UsersRound} items={userManagementItems}
                                   onNavigate={onClose}/>}
-            <SidebarMenuGroup label="Transactions" icon={ReceiptText} items={transactionItems} onNavigate={onClose}/>
+            {transactionItems.length > 0 && <SidebarMenuGroup label="Transactions" icon={ReceiptText} items={transactionItems} onNavigate={onClose}/>}
             <SidebarMenuGroup label="Setup" icon={Settings} items={setupItems} onNavigate={onClose}/>
         </nav>
 

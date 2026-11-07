@@ -47,16 +47,21 @@ public class AccountLayerService {
         requireCoa(coaId);
         var context = requireContext(companyId, company, coaId, data);
         var keyValues = keyValues(level, data);
+        if (level < 3 && (data.containsKey("acctype") || data.containsKey("accgroup")))
+            throw bad("Account type and account group start at the Control layer");
         var values = new LinkedHashMap<String, Object>();
         values.put("branch_code", context.branchCode());
         values.put("project_code", context.projectCode());
         values.put("finance_code", context.financeCode());
         values.put("component_code", context.componentCode());
         for (String field : fields(level)) values.put(field, fieldValue(data, field));
-        if (values.get("acctype") != null && !List.of("L", "A", "I", "E").contains(values.get("acctype")))
+        if (level >= 3 && values.get("acctype") == null) throw bad("Account type is required from the Control layer onward");
+        if (level >= 3 && values.get("accgroup") == null) throw bad("Account group is required from the Control layer onward");
+        if (values.containsKey("acctype") && !List.of("L", "A", "I", "E").contains(values.get("acctype")))
             throw bad("Account type must be L, A, I, or E");
-        if (values.get("accgroup") != null && !List.of("B", "C", "O").contains(values.get("accgroup")))
+        if (values.containsKey("accgroup") && !List.of("B", "C", "O").contains(values.get("accgroup")))
             throw bad("Account group must be B, C, or O");
+        if (level > 3) requireControlClassification(company, coaId, keyValues, values);
         validateReferences(company, values);
         var scope = new ArrayList<Object>(List.of(company, coaId));
         scope.addAll(keyValues);
@@ -84,6 +89,8 @@ public class AccountLayerService {
         } catch (DataIntegrityViolationException e) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "This code already exists or its parent account no longer exists");
         }
+        if (level == 3 && update)
+            cascadeControlClassification(company, coaId, keyValues, values, actor);
         audit(companyId, actor, update ? "COA_UPDATED" : "COA_CREATED", coaId, keyValues);
         return response(jdbc.queryForMap("SELECT * FROM " + table + " WHERE " + where(level), scope.toArray()));
     }
@@ -157,6 +164,30 @@ public class AccountLayerService {
         if (values.get("category_code") != null && !Boolean.TRUE.equals(jdbc.queryForObject(
                 "SELECT EXISTS (SELECT 1 FROM category_info WHERE category_code = ?)", Boolean.class, values.get("category_code"))))
             throw bad("Select an existing category");
+    }
+
+    private void requireControlClassification(String company, long coaId, List<Object> keyValues,
+            Map<String, Object> values) {
+        var controls = jdbc.queryForList("""
+                SELECT acctype, accgroup FROM a_l3
+                WHERE company_code = ? AND coa_id = ? AND l1_code = ? AND l2_code = ? AND l3_code = ?
+                """, company, coaId, keyValues.get(0), keyValues.get(1), keyValues.get(2));
+        if (controls.isEmpty()) throw bad("Select an existing Control layer account");
+        var control = controls.getFirst();
+        if (!Objects.equals(control.get("acctype"), values.get("acctype"))
+                || !Objects.equals(control.get("accgroup"), values.get("accgroup")))
+            throw bad("Account type and account group must match the selected Control layer account");
+    }
+
+    private void cascadeControlClassification(String company, long coaId, List<Object> keyValues,
+            Map<String, Object> values, UUID actor) {
+        for (String descendant : List.of("a_l4", "a_acc_head")) {
+            jdbc.update("UPDATE " + descendant + " SET acctype = ?, accgroup = ?, upd_user = ?, upd_date = CURRENT_TIMESTAMP"
+                            + " WHERE company_code = ? AND coa_id = ? AND l1_code = ? AND l2_code = ? AND l3_code = ?"
+                            + " AND (acctype IS DISTINCT FROM ? OR accgroup IS DISTINCT FROM ?)",
+                    values.get("acctype"), values.get("accgroup"), actor.toString(), company, coaId,
+                    keyValues.get(0), keyValues.get(1), keyValues.get(2), values.get("acctype"), values.get("accgroup"));
+        }
     }
 
     private Context requireContext(UUID companyId, String companyCode, long coaId, Map<String, Object> data) {
@@ -262,7 +293,8 @@ public class AccountLayerService {
     }
     private static String where(int level) { return "company_code = ? AND coa_id = ? AND " + String.join(" AND ", keys(level).stream().map(k -> k + " = ?").toList()); }
     private static List<String> fields(int level) {
-        var result = new ArrayList<>(List.of(level == 5 ? "acchead" : "l" + level + "_desc", "acctype", "accgroup"));
+        var result = new ArrayList<>(List.of(level == 5 ? "acchead" : "l" + level + "_desc"));
+        if (level >= 3) result.addAll(List.of("acctype", "accgroup"));
         if (level < 5) result.add("device_flage");
         if (level == 2) result.add("category_code");
         if (level == 3) result.add("acc_spl_group");

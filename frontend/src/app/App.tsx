@@ -3,7 +3,9 @@ import { AppShell } from './AppShell'
 import { AccountLayersPage } from '../pages/setup/chart-of-accounts/AccountLayersPage'
 import { InitialCoaPage } from '../pages/setup/chart-of-accounts/InitialCoaPage'
 import { DashboardPage } from '../pages/DashboardPage'
-import { JournalVouchersPage } from '../pages/transactions/JournalVouchersPage'
+import { DebitVoucherPage } from '../pages/transactions/DebitVoucherPage'
+import { CreditVoucherPage } from '../pages/transactions/CreditVoucherPage'
+import { JournalVoucherPage } from '../pages/transactions/JournalVoucherPage'
 import { LoginPage } from '../pages/auth/LoginPage'
 import { ProtectedRoute } from '../modules/auth/ProtectedRoute'
 import { UserManagementPage } from '../pages/user-management/UserManagementPage'
@@ -28,7 +30,10 @@ export function App() {
           <Route path="setup/initial-coa" element={<InitialCoaPage />} />
           <Route path="accounts" element={<Navigate to="/setup/initial-coa" replace />} />
           <Route path="setup/chart-of-accounts" element={<AccountLayersPage />} />
-          <Route path="journals" element={<JournalVouchersPage />} />
+          <Route path="journals" element={<Navigate to="/transactions/journal-vouchers" replace />} />
+          <Route path="transactions/debit-vouchers" element={<DebitVoucherPage />} />
+          <Route path="transactions/credit-vouchers" element={<CreditVoucherPage />} />
+          <Route path="transactions/journal-vouchers" element={<JournalVoucherPage />} />
           <Route path="user-management/users" element={<UserManagementPage view="users" />} />
           <Route path="user-management/roles" element={<UserManagementPage view="roles" />} />
           <Route path="users" element={<Navigate to="/user-management/users" replace />} />

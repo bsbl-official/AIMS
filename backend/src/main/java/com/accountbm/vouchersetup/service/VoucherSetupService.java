@@ -110,6 +110,8 @@ public class VoucherSetupService {
     @Transactional
     public VoucherSetupResponse update(UUID companyId, UUID id, UpdateVoucherSetupRequest request, UUID actor) {
         require(actor, companyId, true);
+        if (usedByVoucher(companyId, id)) throw new ResponseStatusException(HttpStatus.CONFLICT,
+                "Voucher setup context and type cannot be changed after vouchers have been created");
         var context = context(companyId, request.branchId(), request.projectCodeId(), request.financeCodeId(), request.componentCodeId(), request.coaId());
         try {
             int updated = jdbc.update("""
@@ -136,11 +138,20 @@ public class VoucherSetupService {
     public VoucherSetupResponse updateControl(UUID companyId, UUID id, UpdateVoucherControlRequest request, UUID actor) {
         require(actor, companyId, true);
         int updated = jdbc.update("""
-                UPDATE a_vr_type SET auto_voucher = ?, voucher_last_no = ?,
+                UPDATE a_vr_type SET auto_voucher = ?, voucher_last_no = ?, voucher_last_date = CURRENT_DATE,
                     upd_user = ?, upd_date = clock_timestamp(), version = version + 1
                 WHERE organization_id = ? AND id = ? AND version = ?
                 """, request.autoVoucher(), request.voucherLastNo(), actor.toString(), companyId, id, request.version());
         if (updated == 0) throw conflictOrMissing(companyId, id);
+        if (request.voucherLastNo() == 0) {
+            jdbc.update("DELETE FROM a_voucher_daily_sequence WHERE voucher_setup_id = ? AND voucher_date = CURRENT_DATE", id);
+        } else {
+            jdbc.update("""
+                    INSERT INTO a_voucher_daily_sequence (voucher_setup_id, voucher_date, last_number)
+                    VALUES (?, CURRENT_DATE, ?)
+                    ON CONFLICT (voucher_setup_id, voucher_date) DO UPDATE SET last_number = EXCLUDED.last_number
+                    """, id, request.voucherLastNo());
+        }
         audit(companyId, actor, "VOUCHER_CONTROL_UPDATED", id.toString());
         return find(companyId, id);
     }
@@ -148,6 +159,8 @@ public class VoucherSetupService {
     @Transactional
     public void delete(UUID companyId, UUID id, UUID actor) {
         require(actor, companyId, true);
+        if (usedByVoucher(companyId, id)) throw new ResponseStatusException(HttpStatus.CONFLICT,
+                "Voucher setup cannot be deleted after vouchers have been created");
         if (jdbc.update("DELETE FROM a_vr_type WHERE organization_id = ? AND id = ?", companyId, id) == 0) throw missing();
         audit(companyId, actor, "VOUCHER_SETUP_DELETED", id.toString());
     }
@@ -172,6 +185,13 @@ public class VoucherSetupService {
         var rows = jdbc.query(SELECT + " WHERE voucher.organization_id = ? AND voucher.id = ?", (rs, rowNum) -> response(rs), companyId, id);
         if (rows.isEmpty()) throw missing();
         return rows.getFirst();
+    }
+    private boolean usedByVoucher(UUID companyId, UUID id) {
+        return Boolean.TRUE.equals(jdbc.queryForObject("""
+                SELECT EXISTS(SELECT 1 FROM a_dr WHERE organization_id = ? AND voucher_setup_id = ?)
+                    OR EXISTS(SELECT 1 FROM a_cr WHERE organization_id = ? AND voucher_setup_id = ?)
+                    OR EXISTS(SELECT 1 FROM a_jv WHERE organization_id = ? AND voucher_setup_id = ?)
+                """, Boolean.class, companyId, id, companyId, id, companyId, id));
     }
 
     private void require(UUID actor, UUID companyId, boolean write) {

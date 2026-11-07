@@ -1,4 +1,5 @@
-import { useState, type FormEvent, type ReactNode } from 'react'
+import { Plus } from 'lucide-react'
+import { useState, type FormEvent, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from 'react'
 import type {
   GroupFormValues, LayerFormValues, ReportFormValues, SpecificationFormValues,
 } from '../../../modules/financial-statement/financial-statement.types'
@@ -21,11 +22,28 @@ const FLAG_OPTIONS = [
 ]
 
 function Actions({ saving, onCancel, onAddAnother, addDisabled, submitLabel = 'Save' }: { saving: boolean; onCancel: () => void; onAddAnother?: () => void; addDisabled?: boolean; submitLabel?: string }) {
+  if (onAddAnother) return <>
+    <button type="button" disabled={saving || addDisabled} onClick={onAddAnother} className="col-span-full flex w-full cursor-pointer items-center justify-center gap-2 rounded-lg border border-dashed border-[#abc5ba] bg-white/55 py-2.5 text-sm text-[#315f5c] transition hover:bg-[#eaf3ef] disabled:cursor-not-allowed disabled:opacity-50">
+      <Plus className="size-4" aria-hidden />
+      Add Another Record
+    </button>
+    <div className="col-span-full flex justify-end"><Button type="submit" disabled={saving}>{saving ? 'Saving...' : 'Save'}</Button></div>
+  </>
   return <ModalActions>
     <Button type="button" variant="secondary" onClick={onCancel}>Cancel</Button>
-    {onAddAnother && <Button type="button" variant="secondary" disabled={saving || addDisabled} onClick={onAddAnother}>Add another</Button>}
     <Button type="submit" disabled={saving}>{saving ? 'Saving...' : submitLabel}</Button>
   </ModalActions>
+}
+
+function focusNextFieldOnEnter(event: ReactKeyboardEvent<HTMLFormElement>) {
+  if (event.key !== 'Enter' || event.shiftKey || event.ctrlKey || event.altKey || event.metaKey || event.nativeEvent.isComposing) return
+  const target=event.target
+  if (!(target instanceof HTMLInputElement) || ['checkbox','radio','button','submit'].includes(target.type) || target.closest('[data-select-popover]')) return
+  const fields=Array.from(event.currentTarget.querySelectorAll<HTMLElement>('input:not([type="hidden"]):not(:disabled), button[aria-haspopup="listbox"]:not(:disabled)'))
+    .filter(field=>field.offsetParent!==null)
+  const next=fields[fields.indexOf(target)+1]
+  event.preventDefault()
+  next?.focus()
 }
 
 function useSubmit<T>(onSave: (values: T) => Promise<void>) {
@@ -48,36 +66,36 @@ function useSubmit<T>(onSave: (values: T) => Promise<void>) {
 export function ReportForm({ initialValues, onSave, onCancel, onAddAnother }: { initialValues?: ReportFormValues; onSave: (values: ReportFormValues) => Promise<void>; onCancel: () => void; onAddAnother?: (values: ReportFormValues) => void }) {
   const [values, setValues] = useState<ReportFormValues>(initialValues ?? { reportCode: '', reportDescription: '', summaryLabel: '' })
   const { saving, submit } = useSubmit(onSave)
-  return <form className="grid grid-cols-2 gap-4 max-md:grid-cols-1" onSubmit={(event) => void submit(event, values)}>
+  return <form className={`grid gap-4 max-md:grid-cols-1 ${initialValues?'md:grid-cols-2':'md:grid-cols-3'}`} onKeyDown={focusNextFieldOnEnter} onSubmit={(event) => void submit(event, values)}>
     <SetupFormField label="Report code"><SetupInput value={values.reportCode} onChange={(event) => setValues({ ...values, reportCode: code(event.target.value) })} pattern="[A-Za-z0-9]+" maxLength={2} required disabled={Boolean(initialValues)} /></SetupFormField>
-    <SetupFormField label="Report description"><SetupInput value={values.reportDescription} onChange={(event) => setValues({ ...values, reportDescription: event.target.value })} maxLength={100} required /></SetupFormField>
-    <SetupFormField label="Report summary label" fullWidth><SetupInput value={values.summaryLabel} onChange={(event) => setValues({ ...values, summaryLabel: event.target.value })} maxLength={100} /></SetupFormField>
-    <Actions saving={saving} onCancel={onCancel} onAddAnother={onAddAnother ? () => onAddAnother(values) : undefined} addDisabled={!values.reportCode || !values.reportDescription.trim()} submitLabel={initialValues ? 'Save changes' : 'Save all'} />
+    <SetupFormField label="Report Layer Name"><SetupInput value={values.reportDescription} onChange={(event) => setValues({ ...values, reportDescription: event.target.value })} maxLength={100} required /></SetupFormField>
+    <SetupFormField label="Report summary label"><SetupInput value={values.summaryLabel} onChange={(event) => setValues({ ...values, summaryLabel: event.target.value })} maxLength={100} /></SetupFormField>
+    <Actions saving={saving} onCancel={onCancel} onAddAnother={onAddAnother ? () => onAddAnother(values) : undefined} addDisabled={!values.reportCode || !values.reportDescription.trim()} submitLabel={initialValues ? 'Save changes' : 'Save'} />
   </form>
 }
 
 export function GroupForm({ parent, initialValues, onSave, onCancel, onAddAnother }: { parent: string; initialValues?: GroupFormValues; onSave: (values: GroupFormValues) => Promise<void>; onCancel: () => void; onAddAnother?: (values: GroupFormValues) => void }) {
   const [values, setValues] = useState<GroupFormValues>(initialValues ?? { groupCode: '', groupDescription: '', summaryLabel: '' })
   const { saving, submit } = useSubmit(onSave)
-  return <form className="grid grid-cols-2 gap-4 max-md:grid-cols-1" onSubmit={(event) => void submit(event, values)}>
+  return <form className={`grid gap-4 max-md:grid-cols-1 ${initialValues?'md:grid-cols-2':'md:grid-cols-3'}`} onKeyDown={focusNextFieldOnEnter} onSubmit={(event) => void submit(event, values)}>
     <ParentNotice>Report: {parent}</ParentNotice>
     <SetupFormField label="Group code"><SetupInput value={values.groupCode} onChange={(event) => setValues({ ...values, groupCode: code(event.target.value) })} pattern="[A-Za-z0-9]+" maxLength={3} required disabled={Boolean(initialValues)} /></SetupFormField>
-    <SetupFormField label="Group description"><SetupInput value={values.groupDescription} onChange={(event) => setValues({ ...values, groupDescription: event.target.value })} maxLength={100} required /></SetupFormField>
-    <SetupFormField label="Group summary label" fullWidth><SetupInput value={values.summaryLabel} onChange={(event) => setValues({ ...values, summaryLabel: event.target.value })} maxLength={100} /></SetupFormField>
-    <Actions saving={saving} onCancel={onCancel} onAddAnother={onAddAnother ? () => onAddAnother(values) : undefined} addDisabled={!values.groupCode || !values.groupDescription.trim()} submitLabel={initialValues ? 'Save changes' : 'Save all'} />
+    <SetupFormField label="Group Layer Name"><SetupInput value={values.groupDescription} onChange={(event) => setValues({ ...values, groupDescription: event.target.value })} maxLength={100} required /></SetupFormField>
+    <SetupFormField label="Group summary label"><SetupInput value={values.summaryLabel} onChange={(event) => setValues({ ...values, summaryLabel: event.target.value })} maxLength={100} /></SetupFormField>
+    <Actions saving={saving} onCancel={onCancel} onAddAnother={onAddAnother ? () => onAddAnother(values) : undefined} addDisabled={!values.groupCode || !values.groupDescription.trim()} submitLabel={initialValues ? 'Save changes' : 'Save'} />
   </form>
 }
 
 export function LayerForm({ parent, initialValues, onSave, onCancel, onAddAnother }: { parent: string; initialValues?: LayerFormValues; onSave: (values: LayerFormValues) => Promise<void>; onCancel: () => void; onAddAnother?: (values: LayerFormValues) => void }) {
   const [values, setValues] = useState<LayerFormValues>(initialValues ?? { layerCode: '', layerDescription: '', summaryLabel: '', sign: '' })
   const { saving, submit } = useSubmit(onSave)
-  return <form className="grid grid-cols-2 gap-4 max-md:grid-cols-1" onSubmit={(event) => void submit(event, values)}>
+  return <form className={`grid gap-4 max-md:grid-cols-1 ${initialValues?'md:grid-cols-2':'md:grid-cols-3'}`} onKeyDown={focusNextFieldOnEnter} onSubmit={(event) => void submit(event, values)}>
     <ParentNotice>Group: {parent}</ParentNotice>
     <SetupFormField label="Layer 1 code"><SetupInput value={values.layerCode} onChange={(event) => setValues({ ...values, layerCode: code(event.target.value) })} pattern="[A-Za-z0-9]+" maxLength={3} required disabled={Boolean(initialValues)} /></SetupFormField>
-    <SetupFormField label="Layer 1 description"><SetupInput value={values.layerDescription} onChange={(event) => setValues({ ...values, layerDescription: event.target.value })} maxLength={100} required /></SetupFormField>
+    <SetupFormField label="Statement Sub Head Name"><SetupInput value={values.layerDescription} onChange={(event) => setValues({ ...values, layerDescription: event.target.value })} maxLength={100} required /></SetupFormField>
     <SetupFormField label="Summary label"><SetupInput value={values.summaryLabel} onChange={(event) => setValues({ ...values, summaryLabel: event.target.value })} maxLength={100} /></SetupFormField>
     <SetupFormField label="Sign"><SearchableSelect ariaLabel="Layer sign" value={values.sign} options={SIGN_OPTIONS} onChange={(sign) => setValues({ ...values, sign })} /></SetupFormField>
-    <Actions saving={saving} onCancel={onCancel} onAddAnother={onAddAnother ? () => onAddAnother(values) : undefined} addDisabled={!values.layerCode || !values.layerDescription.trim()} submitLabel={initialValues ? 'Save changes' : 'Save all'} />
+    <Actions saving={saving} onCancel={onCancel} onAddAnother={onAddAnother ? () => onAddAnother(values) : undefined} addDisabled={!values.layerCode || !values.layerDescription.trim()} submitLabel={initialValues ? 'Save changes' : 'Save'} />
   </form>
 }
 
@@ -105,10 +123,10 @@ export function SpecificationForm({ parent, initialValues, onSave, onCancel, onA
   const [values, setValues] = useState<SpecificationFormValues>(initialValues ?? emptySpecification)
   const { saving, submit } = useSubmit(onSave)
   const set = (key: keyof SpecificationFormValues, value: string) => setValues((current) => ({ ...current, [key]: value }))
-  return <form className="grid grid-cols-2 gap-4 max-md:grid-cols-1" onSubmit={(event) => void submit(event, values)}>
+  return <form className={`grid gap-4 max-md:grid-cols-1 ${initialValues?'md:grid-cols-2':'md:grid-cols-3'}`} onKeyDown={focusNextFieldOnEnter} onSubmit={(event) => void submit(event, values)}>
     <ParentNotice>Layer 1: {parent}</ParentNotice>
     <SetupFormField label="Layer 2 code"><SetupInput value={values.specificationCode} onChange={(event) => set('specificationCode', code(event.target.value))} pattern="[A-Za-z0-9]+" maxLength={6} required disabled={Boolean(initialValues)} /></SetupFormField>
-    <SetupFormField label="Layer 2 description"><SetupInput value={values.specificationDescription} onChange={(event) => set('specificationDescription', event.target.value)} maxLength={100} required /></SetupFormField>
+    <SetupFormField label="Statement Sub-Sub Head Name"><SetupInput value={values.specificationDescription} onChange={(event) => set('specificationDescription', event.target.value)} maxLength={100} required /></SetupFormField>
     <SetupFormField label="Layer 2 sign"><SearchableSelect ariaLabel="Layer 2 sign" value={values.sign} options={SIGN_OPTIONS} onChange={(value) => set('sign', value)} /></SetupFormField>
     <SetupFormField label="Group sign"><SearchableSelect ariaLabel="Group sign" value={values.groupSign} options={SIGN_OPTIONS} onChange={(value) => set('groupSign', value)} /></SetupFormField>
     <SetupFormField label="Report type"><SetupInput value={values.reportType} onChange={(event) => set('reportType', event.target.value.toUpperCase())} maxLength={1} required disabled={Boolean(initialValues)} /></SetupFormField>
@@ -119,12 +137,12 @@ export function SpecificationForm({ parent, initialValues, onSave, onCancel, onA
     <SetupFormField label="Ratio parameter"><SetupInput value={values.ratioParameter} onChange={(event) => set('ratioParameter', event.target.value)} maxLength={30} /></SetupFormField>
     <SetupFormField label="Layer 2 dummy code"><SetupInput value={values.specificationCodeDummy} onChange={(event) => set('specificationCodeDummy', event.target.value.toUpperCase())} maxLength={50} /></SetupFormField>
     {flagFields.map((field) => <SetupFormField key={field.key} label={field.label}><SearchableSelect ariaLabel={field.label} value={values[field.key]} options={FLAG_OPTIONS} onChange={(value) => set(field.key, value)} /></SetupFormField>)}
-    <Actions saving={saving} onCancel={onCancel} onAddAnother={onAddAnother ? () => onAddAnother(values) : undefined} addDisabled={!values.specificationCode || !values.specificationDescription.trim() || !values.reportType} submitLabel={initialValues ? 'Save changes' : 'Save all'} />
+    <Actions saving={saving} onCancel={onCancel} onAddAnother={onAddAnother ? () => onAddAnother(values) : undefined} addDisabled={!values.specificationCode || !values.specificationDescription.trim() || !values.reportType} submitLabel={initialValues ? 'Save changes' : 'Save'} />
   </form>
 }
 
 function ParentNotice({ children }: { children: ReactNode }) {
-  return <div className="rounded-lg border border-[#dce4df] bg-[#f4f7f5] px-3 py-2.5 text-sm text-[#405653] md:col-span-2">{children}</div>
+  return <div className="rounded-lg border border-[#dce4df] bg-[#f4f7f5] px-3 py-2.5 text-sm text-[#405653] md:col-span-full">{children}</div>
 }
 
 function digits(value: string) {

@@ -13,11 +13,11 @@ import { SkeletonBoundary, TableSkeleton } from '../../../shared/components/Skel
 import { StatusBadge } from '../../../shared/components/StatusBadge'
 import { TableActionButton } from '../../../shared/components/TableActionButton'
 import { BranchForm } from '../../../shared/components/branch/BranchForm'
-import { SearchableSelect } from '../../../shared/components/SearchableSelect'
 import { companyApi } from '../../../modules/company/api/company.api'
 import type { Company } from '../../../modules/company/company.types'
 import { branchApi } from '../../../modules/branch/api/branch.api'
 import type { Branch, BranchFormValues } from '../../../modules/branch/branch.types'
+import { useOrganizationContext } from '../../../modules/organization-context/useOrganizationContext'
 
 export function BranchSetupPage() {
   const { can } = useAuth()
@@ -27,6 +27,7 @@ export function BranchSetupPage() {
   const [branches, setBranches] = useState<Branch[]>([])
   const [editing, setEditing] = useState<Branch | null | undefined>(undefined)
   const [loading, setLoading] = useState(true)
+  const { companyId: globalCompanyId } = useOrganizationContext()
   const canView = can('branches.read') || can('branches.manage')
   const canEdit = can('branches.manage')
 
@@ -57,6 +58,7 @@ export function BranchSetupPage() {
       }
     })()
   }, [canView, loadBranches, toast])
+  useEffect(() => { if (globalCompanyId && globalCompanyId !== companyId) { setCompanyId(globalCompanyId); void loadBranches(globalCompanyId) } }, [companyId, globalCompanyId, loadBranches])
 
   const columns = useMemo<Column<Branch>[]>(() => [
     { key: 'company', header: 'Company', render: (branch) => <div><strong className="block">{branch.companyName}</strong><small className="mt-0.5 block text-[#7c8b88]">{branch.companyCode}</small></div> },
@@ -79,12 +81,6 @@ export function BranchSetupPage() {
   }
 
   return <PageContainer breadcrumbs={[{ label: 'Dashboard', to: '/' }, { label: 'Setup' }, { label: 'Branch setup' }]} title="Branch setup" action={canEdit && companyId ? <Button onClick={() => setEditing(null)}><span className="inline-flex items-center gap-2"><PlusIcon className="size-4" aria-hidden />Add New</span></Button> : undefined}>
-    <div className="mb-4 flex justify-end">
-      <div className="grid grid-cols-[auto_300px] items-center gap-3 text-[13px] font-medium text-[#405653] max-sm:w-full max-sm:grid-cols-1">
-        <span>Company</span>
-        <SearchableSelect ariaLabel="Company" value={companyId} options={companies.map((company) => ({ value: company.id, label: company.legalName, description: String(company.code) }))} onChange={(value) => { setCompanyId(value); void loadBranches(value) }} placeholder="Select a company" searchPlaceholder="Search companies..." emptyMessage="No companies found." />
-      </div>
-    </div>
     <Card className="overflow-x-auto">
       <SkeletonBoundary loading={loading} fallback={<TableSkeleton columns={5} rows={5} />} minimumDurationMs={500}>
         <DataTable columns={columns} rows={branches} rowKey={(branch) => branch.id} emptyMessage={companyId ? 'No branches are configured for this company.' : 'No companies are available.'} />

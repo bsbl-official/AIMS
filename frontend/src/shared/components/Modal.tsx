@@ -16,7 +16,7 @@ type ModalProps = {
 const sizeClasses: Record<ModalSize, string> = {
   medium: 'sm:w-[560px]',
   large: 'sm:w-[720px]',
-  batch: 'h-[calc(100dvh-16px)] sm:h-[min(760px,calc(100dvh-32px))] sm:w-[920px]',
+  batch: 'sm:w-[920px]',
   xlarge: 'h-[calc(100dvh-16px)] sm:h-[calc(100dvh-32px)] sm:max-h-[820px] sm:w-[1180px]',
 }
 
@@ -27,12 +27,20 @@ export function ModalActions({ children, className = '' }: { children: ReactNode
 export function Modal({ open, title, children, onClose, size = 'large', description }: ModalProps) {
   const titleId = useId()
   const dialogRef = useRef<HTMLElement>(null)
+  const onCloseRef = useRef(onClose)
+
+  useEffect(() => {
+    onCloseRef.current = onClose
+  }, [onClose])
 
   useEffect(() => {
     if (!open) return
     const previousOverflow = document.body.style.overflow
+    const previousPaddingRight = document.body.style.paddingRight
+    const scrollbarWidth = window.innerWidth - document.documentElement.clientWidth
+    if (scrollbarWidth > 0) document.body.style.paddingRight = `${scrollbarWidth}px`
     document.body.style.overflow = 'hidden'
-    const closeOnEscape = (event: KeyboardEvent) => event.key === 'Escape' && onClose()
+    const closeOnEscape = (event: KeyboardEvent) => event.key === 'Escape' && onCloseRef.current()
     window.addEventListener('keydown', closeOnEscape)
     requestAnimationFrame(() => {
       const focusable = dialogRef.current?.querySelector<HTMLElement>('[data-modal-body] input:not(:disabled), [data-modal-body] button:not(:disabled), [data-modal-body] textarea:not(:disabled), [data-modal-body] [tabindex="0"]')
@@ -40,9 +48,10 @@ export function Modal({ open, title, children, onClose, size = 'large', descript
     })
     return () => {
       document.body.style.overflow = previousOverflow
+      document.body.style.paddingRight = previousPaddingRight
       window.removeEventListener('keydown', closeOnEscape)
     }
-  }, [onClose, open])
+  }, [open])
 
   if (!open) return null
 

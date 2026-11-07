@@ -26,7 +26,8 @@ export const codeKey = (level: number) => `l${level}_code`
 export const descriptionKey = (level: number) => level === 5 ? 'acchead' : `l${level}_desc`
 export const keyFields = (level: number): AccountField[] => Array.from({length:level}, (_,i) => field(codeKey(i+1),`${layerNames[i]} code`,i<2?6:10))
 export const editableFields = (level: number): AccountField[] => [
-  field(descriptionKey(level),level===5?'Account head':'Description',100), field('acctype','Account type',1), field('accgroup','Account group',1),
+  field(descriptionKey(level),level===5?'Account Head Name':`${layerNames[level-1]} Name`,100),
+  ...(level>=3?[field('acctype','Account type',1),field('accgroup','Account group',1)]:[]),
   ...(level<5?[flag('device_flage','Device flag')]:[]), ...(level===2?[field('category_code','Category',6)]:[]),
   ...(level===3?[field('acc_spl_group','Special account group',2)]:[]), ...(level===5?headFields:[]),
 ]

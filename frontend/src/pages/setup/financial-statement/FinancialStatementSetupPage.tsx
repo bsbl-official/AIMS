@@ -1,6 +1,6 @@
 ﻿import {Pencil, Plus, Search, Trash2} from 'lucide-react'
 import {type ReactNode, useCallback, useEffect, useMemo, useRef, useState} from 'react'
-import {Filter, X} from 'lucide-react'
+import {Eye, Filter, X} from 'lucide-react'
 import {useAuth} from '../../../modules/auth/hooks/useAuth'
 import {branchApi} from '../../../modules/branch/api/branch.api'
 import type {Branch} from '../../../modules/branch/branch.types'
@@ -44,6 +44,7 @@ import {SkeletonBoundary, TableSkeleton} from '../../../shared/components/Skelet
 import {TableActionButton} from '../../../shared/components/TableActionButton'
 import {setupInputClass} from '../../../shared/components/forms/SetupFormField'
 import {formatCode} from '../../../shared/utils/formatCode'
+import {useOrganizationContext} from '../../../modules/organization-context/useOrganizationContext'
 
 type StatementLevel = 'report' | 'group' | 'layer' | 'specification'
 type ModalType = StatementLevel | null
@@ -73,6 +74,7 @@ const LEVEL_TITLES: Record<StatementLevel, string> = {
 
 export function FinancialStatementSetupPage() {
     const {can, user} = useAuth()
+    const {companyId:globalCompanyId,branchId:globalBranchId}=useOrganizationContext()
     const toast = useToast()
     const [companies, setCompanies] = useState<Company[]>([])
     const [companyId, setCompanyId] = useState('')
@@ -138,8 +140,7 @@ export function FinancialStatementSetupPage() {
                 setCompanies(nextCompanies)
                 setCoas(nextCoas)
                 setCoaId(String(nextCoas[0]?.coaId ?? ''))
-                const assigned = user?.organizations[0]?.organizationId
-                const nextCompanyId = !user?.superAdmin && assigned ? assigned : (nextCompanies[0]?.id ?? '')
+                const nextCompanyId = globalCompanyId
                 setCompanyId(nextCompanyId)
                 await loadHierarchy(nextCompanyId, String(nextCoas[0]?.coaId ?? ''))
             } catch (reason) {
@@ -147,7 +148,7 @@ export function FinancialStatementSetupPage() {
                 setLoading(false)
             }
         })()
-    }, [canView, loadHierarchy, toast, user])
+    }, [canView, globalCompanyId, loadHierarchy, toast, user])
 
     useEffect(() => {
         let active = true
@@ -158,11 +159,11 @@ export function FinancialStatementSetupPage() {
             const activeBranches = nextBranches.filter((item) => item.status === 'ACTIVE')
             const activeProjects = nextProjects.filter((item) => item.status === 'ACTIVE')
             setBranches(activeBranches); setProjects(activeProjects)
-            setBranchId(activeBranches[0]?.id ?? '')
+            setBranchId(activeBranches.some((item)=>item.id===globalBranchId)?globalBranchId:activeBranches[0]?.id ?? '')
             setProjectId(String(activeProjects[0]?.id ?? ''))
         }).catch((reason) => { if (active) setContextError(reason instanceof Error ? reason.message : 'Unable to load statement context.') })
         return () => { active = false }
-    }, [companyId])
+    }, [companyId, globalBranchId])
 
     useEffect(() => {
         let active = true
@@ -252,7 +253,7 @@ export function FinancialStatementSetupPage() {
 
     const reportColumns = useMemo<Column<StatementReport>[]>(() => [
         {key: 'code', header: 'Report Code', render: (item) => formatId(item.reportCode, 2)},
-        {key: 'description', header: 'Report Description', render: (item) => item.reportDescription},
+        {key: 'description', header: 'Report Layer Name', render: (item) => item.reportDescription},
         {key: 'summary', header: 'Summary Label', render: (item) => item.summaryLabel ?? '—'},
         ...(canEdit ? actionColumns<StatementReport>(
             (item) => setEditing({level: 'report', item}),
@@ -275,7 +276,7 @@ export function FinancialStatementSetupPage() {
         {key: 'report', header: 'Report Code', render: (item) => <CodeBadge>{formatId(item.reportCode, 2)}</CodeBadge>},
         {key: 'group', header: 'Group Code', render: (item) => <CodeBadge>{formatId(item.groupCode, 3)}</CodeBadge>},
         {key: 'code', header: 'Sub Head Code', render: (item) => formatId(item.layerCode, 3)},
-        {key: 'description', header: 'Sub Head Name', render: (item) => item.layerDescription},
+        {key: 'description', header: 'Statement Sub Head Name', render: (item) => item.layerDescription},
         {key: 'sign', header: 'Sign', align: 'center', render: (item) => item.sign ?? '—'},
         ...(canEdit ? actionColumns<LayerListItem>(
             (item) => setEditing({level: 'layer', item}),
@@ -288,7 +289,7 @@ export function FinancialStatementSetupPage() {
         {key: 'group', header: 'Group', render: (item) => <CodeBadge>{formatId(item.groupCode, 3)}</CodeBadge>},
         {key: 'layer', header: 'Sub Head', render: (item) => <CodeBadge>{formatId(item.layerCode, 3)}</CodeBadge>},
         {key: 'code', header: 'Sub-Sub Head Code', render: (item) => formatId(item.specificationCode, 6)},
-        {key: 'description', header: 'Sub-Sub Head Name', render: (item) => item.specificationDescription},
+        {key: 'description', header: 'Statement Sub-Sub Head Name', render: (item) => item.specificationDescription},
         {key: 'type', header: 'Report Type', align: 'center', render: (item) => item.reportType ?? '—'},
         {key: 'sign', header: 'Sign', align: 'center', render: (item) => item.sign ?? '—'},
         ...(canEdit ? actionColumns<SpecificationListItem>(
@@ -375,7 +376,7 @@ export function FinancialStatementSetupPage() {
         ...(level === 'layer' || level === 'specification' ? [filterGroupCode] : []),
         ...(level === 'specification' ? [filterLayerCode] : []),
     ].filter(Boolean).length
-    const modalTitle = `Create New ${LEVEL_OPTIONS.find((item) => item.value === level)?.label ?? 'Statement Layer'}`
+    const modalTitle = `Create ${LEVEL_OPTIONS.find((item) => item.value === level)?.label ?? 'Statement Layer'} records`
     const crumbs = [{label: 'Dashboard', to: '/'}, {label: 'Setup'}, {label: 'Financial statement setup'}]
     if (!canView) return <PageContainer breadcrumbs={crumbs} title="Access denied"><Card>You do not have access to
         financial statement setup.</Card></PageContainer>
@@ -384,15 +385,9 @@ export function FinancialStatementSetupPage() {
         <div
             className="mb-5 rounded-2xl border border-[#c2d9d0] bg-[linear-gradient(120deg,rgba(220,240,233,.92),rgba(248,250,244,.96),rgba(246,232,198,.72))] p-5 shadow-[0_10px_28px_rgba(35,84,77,.09)]">
             <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-                <LabeledControl label="Company"><SearchableSelect ariaLabel="Company" value={companyId}
-                    options={companies.map((item) => ({value: item.id, label: `${item.code} - ${item.legalName}`}))}
-                    onChange={(value) => {setCompanyId(value); setReports([]); setQuery(''); clearFilters(); setFilterOpen(false); void loadHierarchy(value, coaId)}}/></LabeledControl>
                 <LabeledControl label="Initial COA"><SearchableSelect ariaLabel="Initial COA" value={coaId}
                     options={coas.map((item) => ({value: String(item.coaId), label: `${formatInitialCoaId(item.coaId)} - ${item.description}`}))}
                     onChange={(value) => {setCoaId(value); setReports([]); void loadHierarchy(companyId, value)}}/></LabeledControl>
-                <LabeledControl label="Branch code"><SearchableSelect ariaLabel="Branch code" value={branchId}
-                    options={branches.map((item) => ({value: item.id, label: `${item.code} - ${item.name}`}))}
-                    onChange={setBranchId}/></LabeledControl>
                 <LabeledControl label="Select statement layer"><SearchableSelect ariaLabel="Statement layer"
                                                                                  value={level} options={LEVEL_OPTIONS}
                                                                                  onChange={(value) => {
@@ -484,7 +479,7 @@ export function FinancialStatementSetupPage() {
             </SkeletonBoundary></div>
         </div>
 
-        <Modal open={modal !== null} title={modalTitle} onClose={() => setModal(null)} size="batch">
+        <Modal open={modal !== null} title={modalTitle} description="Add multiple records and save them together." onClose={() => setModal(null)} size="batch">
             {modal && <ParentCodeSelectors level={modal} reports={reports} reportCode={reportCode} groupCode={groupCode}
                                            layerCode={layerCode} onReportChange={(value) => {
                 setReportCode(value);
@@ -500,12 +495,16 @@ export function FinancialStatementSetupPage() {
                 {batchItems.length > 0 && <div className="mb-4 grid gap-2">{batchItems.map((item, index) =>
                     <section key={`${batchKey(level, item)}-${index}`} className="overflow-hidden rounded-lg border border-[#c9ddd5] bg-white/80 text-sm">
                         <div className="flex items-center justify-between gap-3 bg-[#eef6f2] px-4 py-3">
-                            <button type="button" aria-expanded={expandedBatchIndex===index} onClick={()=>setExpandedBatchIndex(current=>current===index?null:index)} className="flex min-w-0 flex-1 cursor-pointer items-center justify-between gap-3 text-left text-[#173d42]">
-                                <span className="truncate"><strong>Record {index + 1}:</strong> {batchLabel(level, item)}</span><span>{expandedBatchIndex===index?'Close':'Open'}</span>
+                            <button type="button" aria-expanded={expandedBatchIndex===index} aria-label={`View record ${index+1}`} title="View record" onClick={()=>setExpandedBatchIndex(index)} className="flex min-w-0 flex-1 cursor-pointer items-center justify-between gap-3 text-left text-[#173d42]">
+                                <span className="truncate"><strong>Record {index + 1}:</strong> {batchLabel(level, item)}</span>
+                                <span className={`grid size-8 shrink-0 place-items-center rounded-lg ${expandedBatchIndex===index?'bg-[#dcece6] text-[#285d5e]':'text-[#52716b] transition hover:bg-[#dcece6] hover:text-[#285d5e]'}`} aria-hidden><Eye className="size-4"/></span>
                             </button>
-                            <button type="button" className="cursor-pointer rounded-md px-2 py-1 text-[#8f3b34] hover:bg-red-50" onClick={() => {setBatchItems((current) => current.filter((_, itemIndex) => itemIndex !== index));setExpandedBatchIndex(null)}}>Remove</button>
+                            <button type="button" aria-label={`Remove record ${index+1}`} title="Remove record" className="grid size-8 shrink-0 cursor-pointer place-items-center rounded-lg text-[#a94b42] transition hover:bg-red-50 hover:text-[#8f3b34]" onClick={() => {
+                                setBatchItems((current) => current.filter((_, itemIndex) => itemIndex !== index))
+                                setExpandedBatchIndex((current) => current===index?(batchItems.length>1?Math.min(index,batchItems.length-2):null):current!==null&&current>index?current-1:current)
+                            }}><Trash2 className="size-4" aria-hidden/></button>
                         </div>
-                        {expandedBatchIndex===index && <dl className="grid gap-x-5 gap-y-3 p-4 sm:grid-cols-2">{batchDetails(item).map(detail=><div key={detail.label} className="min-w-0 border-b border-[#e3ece8] pb-2"><dt className="text-xs text-[#617774]">{detail.label}</dt><dd className="m-0 mt-1 break-words text-[#243f43]">{detail.value || '—'}</dd></div>)}</dl>}
+                        {expandedBatchIndex===index && <dl className="grid gap-x-5 gap-y-3 p-4 md:grid-cols-3">{batchDetails(item).map(detail=><div key={detail.label} className="min-w-0 border-b border-[#e3ece8] pb-2"><dt className="text-xs text-[#617774]">{detail.label}</dt><dd className="m-0 mt-1 break-words text-[#243f43]">{detail.value || '—'}</dd></div>)}</dl>}
                     </section>)}</div>}
                 {modal === 'report' &&
                     <ReportForm key={`report-${batchItems.length}`} onCancel={() => setModal(null)} onAddAnother={queueBatchItem} onSave={async (values: ReportFormValues) => {
@@ -639,7 +638,7 @@ function ParentCodeSelectors({
     return <div className="rounded-xl border border-[#c6dbd2] bg-[linear-gradient(120deg,#e7f4ef,#fbf7ea)] p-4">
         <p className="mt-0 mb-3 text-xs font-normal uppercase tracking-[.12em] text-[#52716b]">Select existing parent
             codes</p>
-        <div className="grid grid-cols-2 gap-4 max-md:grid-cols-1">
+        <div className="grid gap-4 md:grid-cols-3">
             <LabeledControl label="Report layer code"><SearchableSelect ariaLabel="Report layer code" value={reportCode}
                                                                         options={reports.map((item) => ({
                                                                             value: String(item.reportCode),

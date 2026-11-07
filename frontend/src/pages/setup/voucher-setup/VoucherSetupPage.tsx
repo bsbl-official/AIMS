@@ -18,6 +18,7 @@ import { Select } from '../../../shared/components/ui/Select'
 import { CompanyCodeSelector } from '../../../shared/components/codes/CompanyCodeSelector'
 import { SetupFormField, SetupInput, setupInputClass } from '../../../shared/components/forms/SetupFormField'
 import { formatCode } from '../../../shared/utils/formatCode'
+import { useOrganizationContext, useOrganizationDirty } from '../../../modules/organization-context/useOrganizationContext'
 
 const CLASS_OPTIONS = [
   { value: 'CREDIT', label: 'Credit Type Voucher' },
@@ -76,6 +77,7 @@ function draftFrom(item: VoucherSetup): RowDraft {
 
 export function VoucherSetupPage() {
   const { can, user } = useAuth()
+  const {branchId:globalBranchId}=useOrganizationContext()
   const toast = useToast()
   const canView = can('voucher_setup.read') || can('voucher_setup.manage')
   const canEdit = can('voucher_setup.manage')
@@ -92,16 +94,17 @@ export function VoucherSetupPage() {
   const [loading, setLoading] = useState(true)
   const [query, setQuery] = useState('')
   const [error, setError] = useState('')
+  useOrganizationDirty(newRows.length>0||editing!==null)
 
   const load = useCallback(async (id: string) => {
     if (!id) { setLoading(false); return }
     setLoading(true); setError('')
     try {
       const [nextItems, nextOptions] = await Promise.all([voucherSetupApi.list(id), voucherSetupApi.options(id)])
-      setItems(nextItems); setOptions(nextOptions); setContext((current) => resolveContext(current, nextOptions))
+      setItems(nextItems); setOptions(nextOptions); setContext((current) => ({...resolveContext(current, nextOptions),branchId:nextOptions.branches.some((entry)=>entry.id===globalBranchId)?globalBranchId:''}))
     } catch (reason) { setError(message(reason)) }
     finally { setLoading(false) }
-  }, [])
+  }, [globalBranchId])
 
   useEffect(() => {
     if (!canView) { setLoading(false); return }
@@ -212,7 +215,6 @@ function VoucherContextFields({ context, options, onChange }: { context: Voucher
   const finances = options.finances.filter((entry) => String(entry.projectCodeId) === context.projectId)
   const components = options.components.filter((entry) => String(entry.projectCodeId) === context.projectId && String(entry.financeCodeId) === context.financeId)
   return <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
-    <SetupFormField label="Branch Code"><SearchableSelect ariaLabel="Branch Code" value={context.branchId} onChange={(branchId) => onChange({ ...context, branchId })} options={options.branches.map((entry) => ({ value: entry.id, label: `${entry.code} - ${entry.name}` }))} /></SetupFormField>
     <SetupFormField label="Project Code"><SearchableSelect ariaLabel="Project Code" value={context.projectId} onChange={(projectId) => {
       const finance = options.finances.find((entry) => String(entry.projectCodeId) === projectId)
       const financeId = String(finance?.id ?? '')

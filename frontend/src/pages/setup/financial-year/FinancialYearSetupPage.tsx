@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useAuth } from '../../../modules/auth/hooks/useAuth'
-import { companyApi } from '../../../modules/company/api/company.api'
+import { useOrganizationContext, useOrganizationDirty } from '../../../modules/organization-context/useOrganizationContext'
 import { financialYearApi } from '../../../modules/financial-year/api/financial-year.api'
 import type { FinancialPeriod } from '../../../modules/financial-year/financial-year.types'
 import { useToast } from '../../../modules/toast/hooks/useToast'
@@ -35,8 +35,8 @@ function buildPreview(companyId: string, startMonth: number): FinancialPeriod[] 
 
 export function FinancialYearSetupPage() {
   const { user } = useAuth()
+  const {companyId}=useOrganizationContext()
   const toast = useToast()
-  const [companyId, setCompanyId] = useState('')
   const [periods, setPeriods] = useState<FinancialPeriod[]>([])
   const [startMonth, setStartMonth] = useState(1)
   const [savedStartMonth, setSavedStartMonth] = useState<number | null>(null)
@@ -65,19 +65,9 @@ export function FinancialYearSetupPage() {
 
   useEffect(() => {
     if (!isFinancialYearAdmin) { setLoading(false); return }
-    void (async () => {
-      try {
-        const next = await companyApi.companies()
-        const assigned = user?.organizations[0]?.organizationId
-        const id = !user?.superAdmin && assigned ? assigned : (next[0]?.id ?? '')
-        setCompanyId(id)
-        await load(id)
-      } catch (reason) {
-        toast.error(reason instanceof ApiError ? reason.message : 'Unable to load companies.', 'Company data unavailable')
-        setLoading(false)
-      }
-    })()
-  }, [isFinancialYearAdmin, load, toast, user])
+    void load(companyId)
+  }, [companyId, isFinancialYearAdmin, load])
+  useOrganizationDirty(dirty)
 
   const columns = useMemo<Column<FinancialPeriod>[]>(() => [
     { key: 'period', header: 'Period', align: 'center', render: (item) => <strong>{item.period}</strong> },

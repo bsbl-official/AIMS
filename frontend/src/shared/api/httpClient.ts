@@ -23,15 +23,15 @@ export async function request<T>(path: string, init: RequestInit = {}, retry = t
   const method = (init.method ?? 'GET').toUpperCase()
   const requiresCsrf = !['GET', 'HEAD', 'OPTIONS', 'TRACE'].includes(method)
   const token = requiresCsrf ? await getCsrfToken() : null
+  const headers = new Headers(init.headers)
+  if (!headers.has('Accept')) headers.set('Accept', 'application/json')
+  if (init.body instanceof FormData) headers.delete('Content-Type')
+  else if (!headers.has('Content-Type')) headers.set('Content-Type', 'application/json')
+  if (token) headers.set('X-XSRF-TOKEN', token)
   const response = await fetch(`${API_BASE_URL}${path}`, {
     ...init,
     credentials: 'include',
-    headers: {
-      Accept: 'application/json',
-      'Content-Type': 'application/json',
-      ...(token ? { 'X-XSRF-TOKEN': token } : {}),
-      ...init.headers,
-    },
+    headers,
   })
 
   if (response.status === 401 && retry && refreshAccessToken && !path.startsWith('/auth/')) {

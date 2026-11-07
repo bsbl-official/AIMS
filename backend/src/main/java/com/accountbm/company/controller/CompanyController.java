@@ -31,7 +31,7 @@ public class CompanyController {
     }
 
     @GetMapping
-    @PreAuthorize("hasAnyAuthority('permission:*', 'permission:companies.read', 'permission:companies.manage', 'permission:branches.read', 'permission:branches.manage', 'permission:project_codes.read', 'permission:project_codes.manage', 'permission:finance_codes.read', 'permission:finance_codes.manage', 'permission:component_codes.read', 'permission:component_codes.manage', 'permission:financial_statements.read', 'permission:financial_statements.manage', 'permission:coa.read', 'permission:coa.manage', 'permission:initial_data.read', 'permission:initial_data.manage', 'permission:voucher_setup.read', 'permission:voucher_setup.manage')")
+    @PreAuthorize("hasAnyAuthority('permission:*', 'permission:companies.read', 'permission:companies.manage', 'permission:branches.read', 'permission:branches.manage', 'permission:project_codes.read', 'permission:project_codes.manage', 'permission:finance_codes.read', 'permission:finance_codes.manage', 'permission:component_codes.read', 'permission:component_codes.manage', 'permission:financial_statements.read', 'permission:financial_statements.manage', 'permission:coa.read', 'permission:coa.manage', 'permission:initial_data.read', 'permission:initial_data.manage', 'permission:voucher_setup.read', 'permission:voucher_setup.manage', 'permission:journal.read', 'permission:journal.create')")
     public List<CompanyResponse> companies(@AuthenticationPrincipal Jwt jwt) {
         return service.companies(actorId(jwt));
     }

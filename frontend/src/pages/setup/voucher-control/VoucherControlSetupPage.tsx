@@ -14,6 +14,7 @@ import { TableActionButton } from '../../../shared/components/TableActionButton'
 import { CompanyCodeSelector } from '../../../shared/components/codes/CompanyCodeSelector'
 import { setupInputClass } from '../../../shared/components/forms/SetupFormField'
 import { Switch } from '../../../shared/components/ui/Switch'
+import { useOrganizationContext, useOrganizationDirty } from '../../../modules/organization-context/useOrganizationContext'
 
 type ControlDraft = { autoVoucher: boolean; voucherLastNo: string }
 
@@ -21,6 +22,7 @@ const message = (reason: unknown) => reason instanceof ApiError ? reason.message
 
 export function VoucherControlSetupPage() {
   const { can, user } = useAuth()
+  const {branchId}=useOrganizationContext()
   const toast = useToast()
   const canView = can('voucher_setup.read') || can('voucher_setup.manage')
   const canEdit = can('voucher_setup.manage')
@@ -33,6 +35,7 @@ export function VoucherControlSetupPage() {
   const [busyId, setBusyId] = useState<string | null>(null)
   const [editingId, setEditingId] = useState<string | null>(null)
   const [error, setError] = useState('')
+  useOrganizationDirty(editingId!==null)
 
   const load = useCallback(async (id: string) => {
     if (!id) { setLoading(false); return }
@@ -58,10 +61,11 @@ export function VoucherControlSetupPage() {
 
   const visible = useMemo(() => {
     const term = query.trim().toLocaleLowerCase()
-    if (!term) return items
-    return items.filter((item) => [item.branchCode, item.branchName, item.voucherClass, item.voucherType, item.description, item.documentType]
+    const scoped=items.filter((item)=>item.branchId===branchId)
+    if (!term) return scoped
+    return scoped.filter((item) => [item.branchCode, item.branchName, item.voucherClass, item.voucherType, item.description, item.documentType]
       .some((value) => value.toLocaleLowerCase().includes(term)))
-  }, [items, query])
+  }, [branchId, items, query])
 
   function setDraft(id: string, values: Partial<ControlDraft>) {
     setDrafts((current) => ({ ...current, [id]: { ...current[id], autoVoucher: current[id]?.autoVoucher ?? false, voucherLastNo: current[id]?.voucherLastNo ?? '0', ...values } }))
@@ -108,18 +112,18 @@ export function VoucherControlSetupPage() {
     <Card>
       <SkeletonBoundary loading={loading} fallback={<TableSkeleton columns={8} rows={6} />} minimumDurationMs={300}>
         <div className="w-full min-w-0 overflow-x-auto rounded-xl border border-[#cbded6] bg-white/70">
-          <table className="w-full min-w-[1256px] table-fixed border-collapse text-[13px]">
+          <table className="w-full min-w-[960px] table-fixed border-collapse text-[13px]">
             <colgroup>
-              <col style={{ width: 180 }} />
-              <col style={{ width: 200 }} />
-              <col style={{ width: 120 }} />
-              <col style={{ width: 120 }} />
-              <col style={{ width: 260 }} />
-              <col style={{ width: 130 }} />
-              <col style={{ width: 150 }} />
-              <col style={{ width: 96 }} />
+              <col style={{ width: '15%' }} />
+              <col style={{ width: '16%' }} />
+              <col style={{ width: '9%' }} />
+              <col style={{ width: '9%' }} />
+              <col style={{ width: '21%' }} />
+              <col style={{ width: '10%' }} />
+              <col style={{ width: '12%' }} />
+              <col style={{ width: '8%' }} />
             </colgroup>
-            <thead className="bg-[linear-gradient(100deg,#d1e9e0,#e5f2ec_58%,#efe0bc)]"><tr>{['Branch', 'Voucher Class', 'Voucher Type', 'Doc Type', 'Description', 'Auto Voucher', 'Voucher Last No', 'Action'].map((header) => <th key={header} className="border-b border-[#bfd5cc] px-3 py-3 text-left text-[12px] font-semibold tracking-[.06em] text-[#315f5c] uppercase">{header}</th>)}</tr></thead>
+            <thead className="bg-[linear-gradient(100deg,#d1e9e0,#e5f2ec_58%,#efe0bc)]"><tr>{['Branch', 'Voucher Class', 'Voucher Type', 'Doc Type', 'Description', 'Auto Voucher', 'Voucher Last No', 'Action'].map((header) => <th key={header} className="border-b border-[#bfd5cc] px-2 py-3 text-left text-[12px] font-semibold tracking-[.06em] text-[#315f5c] uppercase">{header}</th>)}</tr></thead>
             <tbody>
               {visible.map((item) => {
                 const draft = drafts[item.id] ?? { autoVoucher: item.autoVoucher, voucherLastNo: String(item.voucherLastNo) }
@@ -131,7 +135,7 @@ export function VoucherControlSetupPage() {
                   <td className={`${cell} text-center`}><Switch ariaLabel={`Automatic voucher numbering for ${item.description}`} checked={draft.autoVoucher} disabled={!canEdit || editingId !== item.id || busyId === item.id} onCheckedChange={(autoVoucher) => setDraft(item.id, { autoVoucher })} /></td>
                   <td className={cell}>{editingId === item.id
                     ? <input aria-label={`Voucher Last No for ${item.description}`} className={`${setupInputClass} py-2 text-right`} disabled={busyId === item.id} min="0" step="1" type="number" value={draft.voucherLastNo} onChange={(event) => setDraft(item.id, { voucherLastNo: event.target.value })} />
-                    : <span className="block pr-3 text-right tabular-nums">{item.voucherLastNo}</span>}</td>
+                    : <span className="block pr-1 text-right tabular-nums">{item.voucherLastNo}</span>}</td>
                   <td className={`${cell} px-1 text-center`}>{editingId === item.id
                     ? <div className="flex w-full justify-center gap-1"><TableActionButton label={`Save ${item.description} control`} disabled={busyId === item.id} onClick={() => void save(item)}><Save className="size-4" /></TableActionButton><TableActionButton label={`Cancel editing ${item.description}`} tone="danger" disabled={busyId === item.id} onClick={() => cancel(item)}><X className="size-4" /></TableActionButton></div>
                     : <TableActionButton label={`Edit ${item.description} control`} disabled={!canEdit || editingId !== null} onClick={() => edit(item)}><Pencil className="size-4" /></TableActionButton>}</td>
@@ -146,6 +150,6 @@ export function VoucherControlSetupPage() {
   </PageContainer>
 }
 
-const cell = 'border-b border-[#dce8e3] px-3 py-2.5 align-middle'
+const cell = 'border-b border-[#dce8e3] px-2 py-2.5 align-middle'
 const title = (value: string) => value.charAt(0) + value.slice(1).toLocaleLowerCase()
 const crumbs = [{ label: 'Dashboard', to: '/' }, { label: 'Setup' }, { label: 'Voucher Control Setup' }]

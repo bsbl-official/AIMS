@@ -2,9 +2,7 @@ import { Download, Eye, Pencil, Plus, Search, Trash2 } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useAuth } from '../../../modules/auth/hooks/useAuth'
 import { branchApi } from '../../../modules/branch/api/branch.api'
-import type { Branch } from '../../../modules/branch/branch.types'
-import { companyApi } from '../../../modules/company/api/company.api'
-import type { Company } from '../../../modules/company/company.types'
+import { useOrganizationContext } from '../../../modules/organization-context/useOrganizationContext'
 import { componentCodeApi } from '../../../modules/component-code/api/component-code.api'
 import type { ComponentCode } from '../../../modules/component-code/component-code.types'
 import { financeCodeApi } from '../../../modules/finance-code/api/finance-code.api'
@@ -98,12 +96,11 @@ async function downloadInitialDataPdf(entry: InitialDataEntry) {
 }
 
 export function InitialDataSetupPage() {
-  const { can, user } = useAuth()
+  const { can } = useAuth()
+  const { companyId, branchId } = useOrganizationContext()
   const toast = useToast()
   const canView = can('initial_data.read') || can('initial_data.manage')
   const canEdit = can('initial_data.manage')
-  const [companies, setCompanies] = useState<Company[]>([])
-  const [companyId, setCompanyId] = useState('')
   const [entries, setEntries] = useState<InitialDataSummary[]>([])
   const [editor, setEditor] = useState<InitialDataEntry | null | undefined>(undefined)
   const [viewing, setViewing] = useState<InitialDataEntry | null>(null)
@@ -122,14 +119,8 @@ export function InitialDataSetupPage() {
 
   useEffect(() => {
     if (!canView) { setLoading(false); return }
-    void companyApi.companies().then((next) => {
-      setCompanies(next)
-      const assigned = user?.organizations[0]?.organizationId
-      const selected = next.find((item) => item.id === assigned)?.id ?? next[0]?.id ?? ''
-      setCompanyId(selected)
-      return loadEntries(selected)
-    }).catch((reason) => { setError(errorMessage(reason)); setLoading(false) })
-  }, [canView, loadEntries, user])
+    void loadEntries(companyId)
+  }, [canView, companyId, loadEntries])
 
   async function openEntry(entryId: string, mode: 'view' | 'edit') {
     setOpening(true); setError('')
@@ -150,10 +141,11 @@ export function InitialDataSetupPage() {
 
   const filtered = useMemo(() => {
     const term = query.trim().toLocaleLowerCase()
-    if (!term) return entries
-    return entries.filter((item) => [entryTitle(item.monthYear), item.branchCode, item.branchName,
+    const scoped = branchId ? entries.filter((item) => item.branchId === branchId) : []
+    if (!term) return scoped
+    return scoped.filter((item) => [entryTitle(item.monthYear), item.branchCode, item.branchName,
       item.projectName, item.financeName, item.componentName].some((value) => value.toLocaleLowerCase().includes(term)))
-  }, [entries, query])
+  }, [branchId, entries, query])
 
   const columns = useMemo<Column<InitialDataSummary>[]>(() => [
     { key: 'title', header: 'Title', render: (item) => <span className="text-[#24484c]">{entryTitle(item.monthYear)}</span> },
@@ -171,14 +163,13 @@ export function InitialDataSetupPage() {
     {error && <p role="alert" className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</p>}
     <Card>
       <div className="mb-4 flex flex-wrap items-end justify-between gap-3 border-b border-[#d7e3de] pb-4">
-        <div className="w-full max-w-80"><SetupFormField label="Company"><SearchableSelect ariaLabel="Company" value={companyId} onChange={(value) => { setCompanyId(value); setQuery(''); void loadEntries(value) }} options={companies.map((item) => ({ value: item.id, label: `${item.code} - ${item.legalName}` }))} /></SetupFormField></div>
         <div className="relative w-full max-w-80"><Search className="absolute top-3.5 left-3 size-4 text-[#71817e]" /><input className={`${setupInputClass} pl-9`} value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search initial data..." aria-label="Search initial data" /></div>
       </div>
       <SkeletonBoundary loading={loading} fallback={<TableSkeleton columns={8} rows={6} />} minimumDurationMs={400}>
         <DataTable columns={columns} rows={filtered} rowKey={(item) => item.entryId} emptyMessage="No Initial Data entries have been created for this company." />
       </SkeletonBoundary>
     </Card>
-    {editor !== undefined && <InitialDataEditor companyId={companyId} initial={editor} entries={entries} onClose={() => setEditor(undefined)} onSaved={async () => {
+    {editor !== undefined && <InitialDataEditor companyId={companyId} globalBranchId={branchId} initial={editor} entries={entries} onClose={() => setEditor(undefined)} onSaved={async () => {
       setEditor(undefined); await loadEntries(companyId); toast.success('Initial data saved.', 'Saved')
     }} />}
     <InitialDataView entry={viewing} onClose={() => setViewing(null)} />
@@ -191,16 +182,15 @@ const draft = (line?: InitialBalanceLine): DraftLine => ({
   debit: line && line.debit !== 0 ? String(line.debit) : '', credit: line && line.credit !== 0 ? String(line.credit) : '',
 })
 
-function InitialDataEditor({ companyId, initial, entries, onClose, onSaved }: {
-  companyId: string; initial: InitialDataEntry | null; entries: InitialDataSummary[]; onClose: () => void; onSaved: () => Promise<void>;
+function InitialDataEditor({ companyId, globalBranchId, initial, entries, onClose, onSaved }: {
+  companyId: string; globalBranchId: string; initial: InitialDataEntry | null; entries: InitialDataSummary[]; onClose: () => void; onSaved: () => Promise<void>;
 }) {
-  const [branches, setBranches] = useState<Branch[]>([])
   const [projects, setProjects] = useState<ProjectCode[]>([])
   const [finances, setFinances] = useState<FinanceCode[]>([])
   const [components, setComponents] = useState<ComponentCode[]>([])
   const [periods, setPeriods] = useState<FinancialPeriod[]>([])
   const [heads, setHeads] = useState<AccountHeadOption[]>([])
-  const [branchId, setBranchId] = useState(initial?.branchId ?? '')
+  const [branchId, setBranchId] = useState(initial?.branchId ?? globalBranchId)
   const [projectId, setProjectId] = useState(String(initial?.projectCodeId ?? ''))
   const [financeId, setFinanceId] = useState(String(initial?.financeCodeId ?? ''))
   const [componentId, setComponentId] = useState(String(initial?.componentCodeId ?? ''))
@@ -219,12 +209,12 @@ function InitialDataEditor({ companyId, initial, entries, onClose, onSaved }: {
         if (!active) return
         const activeBranches = nextBranches.filter((item) => item.status === 'ACTIVE')
         const activeProjects = nextProjects.filter((item) => item.status === 'ACTIVE')
-        setBranches(activeBranches); setProjects(activeProjects); setPeriods(nextPeriods); setHeads(nextHeads)
-        setBranchId((current) => current || activeBranches[0]?.id || '')
+        setProjects(activeProjects); setPeriods(nextPeriods); setHeads(nextHeads)
+        setBranchId((current) => current || globalBranchId || activeBranches[0]?.id || '')
         setProjectId((current) => current || String(activeProjects[0]?.id ?? ''))
       }).catch((reason) => setError(errorMessage(reason))).finally(() => { if (active) setLoading(false) })
     return () => { active = false }
-  }, [companyId])
+  }, [companyId, globalBranchId])
 
   useEffect(() => {
     setFinances([]); setComponents([])
@@ -299,7 +289,6 @@ function InitialDataEditor({ companyId, initial, entries, onClose, onSaved }: {
   return <Modal open title={initial ? 'Edit Initial Data Entry' : 'Create New Initial Data Entry'} description="Set the entry context, add account-head opening balances, and save the complete initial data entry." onClose={onClose} size="xlarge">
     <SkeletonBoundary loading={loading} fallback={<TableSkeleton columns={4} rows={4} />} minimumDurationMs={300}>
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        <SetupFormField label="Branch"><SearchableSelect ariaLabel="Branch" value={branchId} onChange={setBranchId} options={branches.map((item) => ({ value: item.id, label: `${item.code} - ${item.name}` }))} /></SetupFormField>
         <SetupFormField label="Project"><SearchableSelect ariaLabel="Project" value={projectId} onChange={setProjectId} options={projects.map((item) => ({ value: String(item.id), label: `${formatCode(item.code)} - ${item.name}` }))} /></SetupFormField>
         <SetupFormField label="Finance code"><SearchableSelect ariaLabel="Finance code" value={financeId} onChange={setFinanceId} disabled={!projectId} options={finances.map((item) => ({ value: String(item.id), label: `${formatCode(item.code)} - ${item.name}` }))} /></SetupFormField>
         <SetupFormField label="Component"><SearchableSelect ariaLabel="Component" value={componentId} onChange={setComponentId} disabled={!financeId} options={components.map((item) => ({ value: String(item.id), label: `${formatCode(item.code)} - ${item.name}` }))} /></SetupFormField>
