@@ -51,9 +51,11 @@ public class CompanyService {
                   JOIN user_profiles user_profile ON user_profile.id = membership.user_id
                   JOIN membership_roles membership_role ON membership_role.membership_id = membership.id
                   JOIN role_permissions role_permission ON role_permission.role_id = membership_role.role_id
+                  JOIN permissions permission ON permission.id=role_permission.permission_id AND permission.status='ACTIVE'
+                  JOIN permission_capabilities permission_capability ON permission_capability.permission_id=permission.id
                   WHERE membership.user_id = ? AND membership.status = 'ACTIVE'
                     AND user_profile.assigned_organization_id = organization.id
-                    AND role_permission.permission_code IN (
+                    AND permission_capability.capability_code IN (
                         'companies.read', 'companies.manage', 'branches.read', 'branches.manage',
                         'project_codes.read', 'project_codes.manage', 'finance_codes.read', 'finance_codes.manage',
                         'component_codes.read', 'component_codes.manage',
@@ -96,8 +98,8 @@ public class CompanyService {
                     VALUES (?, ?, 'COMPANY_ADMIN', 'Company Administrator', true)
                     """, administratorRoleId, id);
             jdbc.update("""
-                    INSERT INTO role_permissions (organization_id, role_id, permission_code)
-                    SELECT ?, ?, code FROM permissions
+                    INSERT INTO role_permissions (organization_id, role_id, permission_id)
+                    SELECT ?, ?, id FROM permissions WHERE organization_id IS NULL AND status='ACTIVE'
                     """, id, administratorRoleId);
         } catch (DataIntegrityViolationException exception) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "A company with this code already exists");

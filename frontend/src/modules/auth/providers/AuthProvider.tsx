@@ -46,6 +46,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setUser(null)
       await authApi.logout().catch(() => undefined)
     },
+    reloadUser: async () => { setUser(await authApi.me()) },
     can: (permission) => Boolean(user?.superAdmin || user?.permissions.includes(permission)),
   }), [loading, user])
 

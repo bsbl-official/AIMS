@@ -55,7 +55,11 @@ export function AppSidebar({open, onClose}: { open: boolean; onClose: () => void
         ...(can('users.read') || can('users.manage') ? [{to: '/user-management/users', label: 'Users'}] : []),
         ...(can('roles.read') || can('roles.manage') ? [{
             to: '/user-management/roles',
-            label: 'Roles & permissions'
+            label: 'Roles'
+        }] : []),
+        ...(can('permissions.read') || can('permissions.manage') ? [{
+            to: '/user-management/permissions',
+            label: 'Permissions'
         }] : []),
     ]
 

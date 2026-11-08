@@ -8,7 +8,7 @@ type PasswordInputProps = Omit<InputHTMLAttributes<HTMLInputElement>, 'type'> & 
 export function PasswordInput({ label, hint, ...inputProps }: PasswordInputProps) {
   const [visible, setVisible] = useState(false)
 
-  return <label className="grid gap-[7px] text-[13px] font-medium text-[#405653]">
+  return <label className="grid w-full self-start content-start gap-[7px] text-[13px] font-medium text-[#405653]">
     {label}
     <span className="relative block">
       <input className="w-full rounded-lg border border-[#ccd5d0] bg-white py-[11px] pr-[46px] pl-3 text-[#203236] outline-none focus:border-[#347077] focus:shadow-[0_0_0_3px_rgba(52,112,119,.12)]" {...inputProps} type={visible ? 'text' : 'password'} />

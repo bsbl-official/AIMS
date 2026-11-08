@@ -10,6 +10,8 @@ import { VoucherListPage } from '../pages/transactions/VoucherListPage'
 import { LoginPage } from '../pages/auth/LoginPage'
 import { ProtectedRoute } from '../modules/auth/ProtectedRoute'
 import { UserManagementPage } from '../pages/user-management/UserManagementPage'
+import { PermissionManagementPage } from '../pages/user-management/PermissionManagementPage'
+import { ProfilePage } from '../pages/profile/ProfilePage'
 import { FinancialStatementSetupPage } from '../pages/setup/financial-statement/FinancialStatementSetupPage'
 import { CompanySetupPage } from '../pages/setup/company/CompanySetupPage'
 import { BranchSetupPage } from '../pages/setup/branch/BranchSetupPage'
@@ -28,6 +30,7 @@ export function App() {
       <Route element={<ProtectedRoute />}>
         <Route element={<AppShell />}>
           <Route index element={<DashboardPage />} />
+          <Route path="profile" element={<ProfilePage />} />
           <Route path="setup/initial-coa" element={<InitialCoaPage />} />
           <Route path="accounts" element={<Navigate to="/setup/initial-coa" replace />} />
           <Route path="setup/chart-of-accounts" element={<AccountLayersPage />} />
@@ -38,6 +41,7 @@ export function App() {
           <Route path="transactions/journal-vouchers" element={<JournalVoucherPage />} />
           <Route path="user-management/users" element={<UserManagementPage view="users" />} />
           <Route path="user-management/roles" element={<UserManagementPage view="roles" />} />
+          <Route path="user-management/permissions" element={<PermissionManagementPage />} />
           <Route path="users" element={<Navigate to="/user-management/users" replace />} />
           <Route path="setup/company" element={<CompanySetupPage />} />
           <Route path="setup/branches" element={<BranchSetupPage />} />

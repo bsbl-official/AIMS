@@ -133,7 +133,7 @@ public class IdentityAdminService {
     @Transactional
     public RoleDetail createRole(SaveRoleRequest request, UUID actorId) {
         requireOrganizationPermission(actorId, request.organizationId(), "roles.manage");
-        validatePermissions(request.permissions());
+        validatePermissions(request.organizationId(), request.permissionIds());
         var id = UUID.randomUUID();
         try {
             jdbc.update("INSERT INTO roles (id, organization_id, code, name, system_role) VALUES (?, ?, ?, ?, false)",
@@ -141,7 +141,7 @@ public class IdentityAdminService {
         } catch (DataIntegrityViolationException exception) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "A role with this code already exists");
         }
-        replacePermissions(request.organizationId(), id, request.permissions());
+        replacePermissions(request.organizationId(), id, request.permissionIds());
         audit(request.organizationId(), actorId, "ROLE_CREATED", id);
         return role(id, request.organizationId(), normalizeRoleCode(request.code()), request.name().strip(), false);
     }
@@ -149,7 +149,7 @@ public class IdentityAdminService {
     @Transactional
     public RoleDetail updateRole(UUID roleId, SaveRoleRequest request, UUID actorId) {
         requireOrganizationPermission(actorId, request.organizationId(), "roles.manage");
-        validatePermissions(request.permissions());
+        validatePermissions(request.organizationId(), request.permissionIds());
         var existingRole = jdbc.query("SELECT code, system_role FROM roles WHERE id = ? AND organization_id = ?",
                 (rs, rowNum) -> new ExistingRole(rs.getString("code"), rs.getBoolean("system_role")),
                 roleId, request.organizationId());
@@ -161,7 +161,7 @@ public class IdentityAdminService {
             jdbc.update("UPDATE roles SET code = ?, name = ?, updated_at = clock_timestamp(), version = version + 1 WHERE id = ?",
                     normalizeRoleCode(request.code()), request.name().strip(), roleId);
         }
-        replacePermissions(request.organizationId(), roleId, request.permissions());
+        replacePermissions(request.organizationId(), roleId, request.permissionIds());
         audit(request.organizationId(), actorId, "ROLE_UPDATED", roleId);
         return role(roleId, request.organizationId(), existingRole.getFirst().systemRole()
                         ? existingRole.getFirst().code() : normalizeRoleCode(request.code()),
@@ -169,9 +169,64 @@ public class IdentityAdminService {
     }
 
     @Transactional(readOnly = true)
-    public List<PermissionSummary> permissions() {
-        return jdbc.query("SELECT code, description FROM permissions ORDER BY code",
-                (rs, rowNum) -> new PermissionSummary(rs.getString("code"), rs.getString("description")));
+    public List<PermissionDetail> permissions(UUID organizationId, UUID actorId) {
+        requireOrganizationPermission(actorId, organizationId, "permissions.read", "permissions.manage");
+        return jdbc.query("""
+                SELECT id,organization_id,code,name,description,status,system_permission,updated_at,version
+                FROM permissions
+                WHERE organization_id IS NULL OR organization_id=?
+                ORDER BY system_permission DESC,code
+                """, (rs,rowNum)->permission(rs.getObject("id",UUID.class),rs.getObject("organization_id",UUID.class),
+                rs.getString("code"),rs.getString("name"),rs.getString("description"),rs.getString("status"),
+                rs.getBoolean("system_permission"),rs.getTimestamp("updated_at").toInstant(),rs.getLong("version")), organizationId);
+    }
+
+    @Transactional(readOnly = true)
+    public List<CapabilitySummary> capabilities(UUID organizationId, UUID actorId) {
+        requireOrganizationPermission(actorId, organizationId, "permissions.read", "permissions.manage");
+        return jdbc.query("SELECT code,module,name,description FROM application_capabilities WHERE active ORDER BY module,name",
+                (rs,rowNum)->new CapabilitySummary(rs.getString("code"),rs.getString("module"),rs.getString("name"),rs.getString("description")));
+    }
+
+    @Transactional
+    public PermissionDetail createPermission(CreatePermissionRequest request, UUID actorId) {
+        requireOrganizationPermission(actorId, request.organizationId(), "permissions.manage");
+        validateCapabilities(request.capabilityCodes());
+        String code=request.code().strip().toLowerCase(Locale.ROOT);
+        Boolean duplicate=jdbc.queryForObject("SELECT EXISTS(SELECT 1 FROM permissions WHERE code=? AND (organization_id IS NULL OR organization_id=?))",Boolean.class,code,request.organizationId());
+        if(Boolean.TRUE.equals(duplicate)) throw new ResponseStatusException(HttpStatus.CONFLICT,"A permission with this code already exists in the company or system catalog");
+        UUID id=UUID.randomUUID();
+        try {
+            jdbc.update("INSERT INTO permissions(id,organization_id,code,name,description,system_permission) VALUES(?,?,?,?,?,false)",
+                    id,request.organizationId(),code,request.name().strip(),request.description().strip());
+        } catch (DataIntegrityViolationException exception) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,"A permission with this code already exists in the company");
+        }
+        replaceCapabilityMappings(id,request.capabilityCodes());
+        revokeOrganizationSessions(request.organizationId());
+        audit(request.organizationId(),actorId,"PERMISSION_CREATED",id);
+        return findPermission(id,request.organizationId());
+    }
+
+    @Transactional
+    public PermissionDetail updatePermission(UUID permissionId, UUID organizationId, UpdatePermissionRequest request, UUID actorId) {
+        requireOrganizationPermission(actorId, organizationId, "permissions.manage");
+        validateCapabilities(request.capabilityCodes());
+        String status=request.status().strip().toUpperCase(Locale.ROOT);
+        if(!Set.of("ACTIVE","INACTIVE").contains(status)) throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"Status must be ACTIVE or INACTIVE");
+        int changed=jdbc.update("""
+                UPDATE permissions SET name=?,description=?,status=?,updated_at=clock_timestamp(),version=version+1
+                WHERE id=? AND organization_id=? AND NOT system_permission AND version=?
+                """,request.name().strip(),request.description().strip(),status,permissionId,organizationId,request.version());
+        if(changed==0){
+            Boolean exists=jdbc.queryForObject("SELECT EXISTS(SELECT 1 FROM permissions WHERE id=? AND organization_id=? AND NOT system_permission)",Boolean.class,permissionId,organizationId);
+            if(!Boolean.TRUE.equals(exists)) throw notFound("Custom permission");
+            throw new ResponseStatusException(HttpStatus.CONFLICT,"Permission was changed by another user; reload and try again");
+        }
+        replaceCapabilityMappings(permissionId,request.capabilityCodes());
+        revokeOrganizationSessions(organizationId);
+        audit(organizationId,actorId,"PERMISSION_UPDATED",permissionId);
+        return findPermission(permissionId,organizationId);
     }
 
     @Transactional(readOnly = true)
@@ -221,9 +276,9 @@ public class IdentityAdminService {
     }
 
     private RoleDetail role(UUID id, UUID organizationId, String code, String name, boolean systemRole) {
-        var permissions = new LinkedHashSet<String>();
-        jdbc.query("SELECT permission_code FROM role_permissions WHERE role_id = ? ORDER BY permission_code",
-                (org.springframework.jdbc.core.RowCallbackHandler) rs -> permissions.add(rs.getString(1)), id);
+        var permissions = new LinkedHashSet<UUID>();
+        jdbc.query("SELECT permission_id FROM role_permissions WHERE role_id = ? ORDER BY permission_id",
+                (org.springframework.jdbc.core.RowCallbackHandler) rs -> permissions.add(rs.getObject(1,UUID.class)), id);
         return new RoleDetail(id, organizationId, code, name, systemRole, permissions);
     }
 
@@ -251,17 +306,51 @@ public class IdentityAdminService {
                 organizationId, membershipId, branchId));
     }
 
-    private void validatePermissions(Set<String> requested) {
-        var all = jdbc.query("SELECT code FROM permissions", (rs, rowNum) -> rs.getString(1));
+    private void validatePermissions(UUID organizationId, Set<UUID> requested) {
+        var all = jdbc.query("SELECT id FROM permissions WHERE status='ACTIVE' AND (organization_id IS NULL OR organization_id=?)",
+                (rs, rowNum) -> rs.getObject(1,UUID.class),organizationId);
         if (requested == null || !all.containsAll(requested)) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "One or more permissions are invalid");
         }
     }
 
-    private void replacePermissions(UUID organizationId, UUID roleId, Set<String> permissions) {
+    private void replacePermissions(UUID organizationId, UUID roleId, Set<UUID> permissions) {
+        validatePermissions(organizationId,permissions);
         jdbc.update("DELETE FROM role_permissions WHERE role_id = ?", roleId);
-        permissions.forEach(permission -> jdbc.update("INSERT INTO role_permissions (organization_id, role_id, permission_code) VALUES (?, ?, ?)",
+        permissions.forEach(permission -> jdbc.update("INSERT INTO role_permissions (organization_id, role_id, permission_id) VALUES (?, ?, ?)",
                 organizationId, roleId, permission));
+        revokeOrganizationSessions(organizationId);
+    }
+
+    private void validateCapabilities(Set<String> requested){
+        var all=jdbc.query("SELECT code FROM application_capabilities WHERE active",(rs,rowNum)->rs.getString(1));
+        if(requested==null||requested.isEmpty()||!all.containsAll(requested))
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"Select one or more valid capabilities");
+    }
+
+    private void replaceCapabilityMappings(UUID permissionId,Set<String> capabilities){
+        jdbc.update("DELETE FROM permission_capabilities WHERE permission_id=?",permissionId);
+        capabilities.forEach(capability->jdbc.update("INSERT INTO permission_capabilities(permission_id,capability_code) VALUES(?,?)",permissionId,capability));
+    }
+
+    private PermissionDetail permission(UUID id,UUID organizationId,String code,String name,String description,String status,boolean systemPermission,Instant updatedAt,long version){
+        var capabilities=new LinkedHashSet<String>();
+        jdbc.query("SELECT capability_code FROM permission_capabilities WHERE permission_id=? ORDER BY capability_code",
+                (org.springframework.jdbc.core.RowCallbackHandler)rs->capabilities.add(rs.getString(1)),id);
+        return new PermissionDetail(id,organizationId,code,name,description,status,systemPermission,capabilities,updatedAt,version);
+    }
+
+    private PermissionDetail findPermission(UUID id,UUID organizationId){
+        var rows=jdbc.query("SELECT id,organization_id,code,name,description,status,system_permission,updated_at,version FROM permissions WHERE id=? AND organization_id=?",
+                (rs,rowNum)->permission(rs.getObject("id",UUID.class),rs.getObject("organization_id",UUID.class),rs.getString("code"),rs.getString("name"),rs.getString("description"),rs.getString("status"),rs.getBoolean("system_permission"),rs.getTimestamp("updated_at").toInstant(),rs.getLong("version")),id,organizationId);
+        if(rows.isEmpty())throw notFound("Permission");return rows.getFirst();
+    }
+
+    private void revokeOrganizationSessions(UUID organizationId){
+        jdbc.update("""
+                UPDATE refresh_tokens SET revoked_at=coalesce(revoked_at,clock_timestamp())
+                WHERE user_id IN (SELECT user_id FROM organization_memberships WHERE organization_id=? AND status='ACTIVE')
+                """,organizationId);
     }
 
     private void audit(UUID organizationId, UUID actorId, String action, UUID entityId) {
@@ -281,9 +370,11 @@ public class IdentityAdminService {
                     JOIN user_profiles user_profile ON user_profile.id = membership.user_id
                     JOIN membership_roles membership_role ON membership_role.membership_id = membership.id
                     JOIN role_permissions role_permission ON role_permission.role_id = membership_role.role_id
+                    JOIN permissions permission ON permission.id=role_permission.permission_id AND permission.status='ACTIVE'
+                    JOIN permission_capabilities permission_capability ON permission_capability.permission_id=permission.id
                     WHERE membership.user_id = ? AND membership.organization_id = ?
                       AND user_profile.assigned_organization_id = membership.organization_id
-                      AND membership.status = 'ACTIVE' AND role_permission.permission_code IN (%s)
+                      AND membership.status = 'ACTIVE' AND permission_capability.capability_code IN (%s)
                 )
                 """.formatted(placeholders);
         var arguments = new ArrayList<>();

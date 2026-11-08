@@ -1,6 +1,7 @@
 package com.accountbm.identity.dto;
 
 import java.time.Instant;
+import java.time.LocalDate;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
@@ -8,6 +9,8 @@ import java.util.UUID;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotEmpty;
+import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 
 public final class IdentityDtos {
@@ -35,8 +38,30 @@ public final class IdentityDtos {
             String email,
             String displayName,
             boolean superAdmin,
+            String gender,
+            boolean profilePhotoAvailable,
+            long profilePhotoVersion,
             Set<String> permissions,
             List<OrganizationAccess> organizations) {}
+
+    public record ProfileResponse(
+            UUID id, String email, String displayName, String status,
+            LocalDate dateOfBirth, String gender, String phone, String address,
+            boolean profilePhotoAvailable, long profilePhotoVersion,
+            String accessScope, List<OrganizationAccess> organizations, long version) {}
+
+    public record UpdateProfileRequest(
+            @NotBlank @Size(max=160) String displayName,
+            LocalDate dateOfBirth,
+            @NotBlank String gender,
+            @Size(max=25) String phone,
+            @Size(max=500) String address,
+            boolean removePhoto,
+            @NotNull Long version) {}
+
+    public record ChangePasswordRequest(
+            @NotBlank String currentPassword,
+            @NotBlank @Size(min=10,max=72) String newPassword) {}
 
     public record CreateUserRequest(
             @Email @NotBlank String email,
@@ -74,15 +99,36 @@ public final class IdentityDtos {
             String code,
             String name,
             boolean systemRole,
-            Set<String> permissions) {}
+            Set<UUID> permissionIds) {}
 
     public record SaveRoleRequest(
             UUID organizationId,
             @NotBlank @Size(max = 60) String code,
             @NotBlank @Size(max = 120) String name,
-            Set<String> permissions) {}
+            Set<UUID> permissionIds) {}
 
-    public record PermissionSummary(String code, String description) {}
+    public record PermissionDetail(
+            UUID id, UUID organizationId, String code, String name, String description,
+            String status, boolean systemPermission, Set<String> capabilityCodes,
+            Instant updatedAt, long version) {}
+
+    public record CapabilitySummary(String code, String module, String name, String description) {}
+
+    public record CreatePermissionRequest(
+            @NotNull UUID organizationId,
+            @NotBlank @Size(max = 100)
+            @Pattern(regexp = "[a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*)+",
+                    message = "Code must use lowercase module.action format") String code,
+            @NotBlank @Size(max = 120) String name,
+            @NotBlank @Size(max = 255) String description,
+            @NotEmpty Set<String> capabilityCodes) {}
+
+    public record UpdatePermissionRequest(
+            @NotBlank @Size(max = 120) String name,
+            @NotBlank @Size(max = 255) String description,
+            @NotBlank String status,
+            @NotEmpty Set<String> capabilityCodes,
+            @NotNull Long version) {}
 
     public record OrganizationSummary(UUID id, String code, String name) {}
 }

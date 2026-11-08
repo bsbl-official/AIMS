@@ -126,8 +126,8 @@ public class AuthenticationService {
     }
 
     private CurrentUser loadCurrentUser(UUID userId) {
-        var users = jdbc.query("SELECT id, email, display_name, super_admin FROM user_profiles WHERE id = ? AND status = 'ACTIVE'",
-                (rs, rowNum) -> new CurrentUserBase(rs.getObject("id", UUID.class), rs.getString("email"), rs.getString("display_name"), rs.getBoolean("super_admin")), userId);
+        var users = jdbc.query("SELECT id,email,display_name,super_admin,gender,profile_photo_data IS NOT NULL photo_available,profile_photo_version FROM user_profiles WHERE id=? AND status='ACTIVE'",
+                (rs, rowNum) -> new CurrentUserBase(rs.getObject("id", UUID.class), rs.getString("email"), rs.getString("display_name"), rs.getBoolean("super_admin"),rs.getString("gender"),rs.getBoolean("photo_available"),rs.getLong("profile_photo_version")), userId);
         if (users.isEmpty()) throw unauthorized();
         var user = users.getFirst();
 
@@ -167,16 +167,18 @@ public class AuthenticationService {
 
         var permissions = new LinkedHashSet<String>();
         jdbc.query("""
-                SELECT DISTINCT role_permission.permission_code
+                SELECT DISTINCT permission_capability.capability_code
                 FROM organization_memberships membership
                 JOIN user_profiles assigned_user ON assigned_user.id = membership.user_id
                 JOIN membership_roles membership_role ON membership_role.membership_id = membership.id
                 JOIN role_permissions role_permission ON role_permission.role_id = membership_role.role_id
+                JOIN permissions permission ON permission.id=role_permission.permission_id AND permission.status='ACTIVE'
+                JOIN permission_capabilities permission_capability ON permission_capability.permission_id=permission.id
                 WHERE membership.user_id = ? AND membership.status = 'ACTIVE'
                   AND membership.organization_id = assigned_user.assigned_organization_id
                 """, (org.springframework.jdbc.core.RowCallbackHandler) rs -> permissions.add(rs.getString(1)), userId);
 
-        return new CurrentUser(user.id(), user.email(), user.displayName(), user.superAdmin(), permissions,
+        return new CurrentUser(user.id(), user.email(), user.displayName(), user.superAdmin(),user.gender(),user.photoAvailable(),user.photoVersion(), permissions,
                 memberships.values().stream().map(OrganizationAccessBuilder::build).toList());
     }
 
@@ -235,7 +237,7 @@ public class AuthenticationService {
     }
 
     private record UserLoginRow(UUID id, String passwordHash, String status, int failedAttempts, Instant lockedUntil) {}
-    private record CurrentUserBase(UUID id, String email, String displayName, boolean superAdmin) {}
+    private record CurrentUserBase(UUID id, String email, String displayName, boolean superAdmin,String gender,boolean photoAvailable,long photoVersion) {}
     private record RefreshRow(UUID id, UUID userId) {}
 
     private static final class OrganizationAccessBuilder {

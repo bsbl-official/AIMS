@@ -71,9 +71,30 @@ public class IdentityAdminController {
     }
 
     @GetMapping("/permissions")
-    @PreAuthorize("hasAnyAuthority('permission:*', 'permission:roles.read', 'permission:roles.manage')")
-    public List<PermissionSummary> permissions() {
-        return service.permissions();
+    @PreAuthorize("hasAnyAuthority('permission:*', 'permission:permissions.read', 'permission:permissions.manage', 'permission:roles.read', 'permission:roles.manage')")
+    public List<PermissionDetail> permissions(@RequestParam UUID organizationId, @AuthenticationPrincipal Jwt jwt) {
+        return service.permissions(organizationId, UUID.fromString(jwt.getSubject()));
+    }
+
+    @GetMapping("/capabilities")
+    @PreAuthorize("hasAnyAuthority('permission:*', 'permission:permissions.read', 'permission:permissions.manage', 'permission:roles.read', 'permission:roles.manage')")
+    public List<CapabilitySummary> capabilities(@RequestParam UUID organizationId, @AuthenticationPrincipal Jwt jwt) {
+        return service.capabilities(organizationId, UUID.fromString(jwt.getSubject()));
+    }
+
+    @PostMapping("/permissions")
+    @ResponseStatus(HttpStatus.CREATED)
+    @PreAuthorize("hasAnyAuthority('permission:*', 'permission:permissions.manage', 'permission:roles.manage')")
+    public PermissionDetail createPermission(@Valid @RequestBody CreatePermissionRequest request,
+            @AuthenticationPrincipal Jwt jwt) {
+        return service.createPermission(request, UUID.fromString(jwt.getSubject()));
+    }
+
+    @PatchMapping("/permissions/{permissionId}")
+    @PreAuthorize("hasAnyAuthority('permission:*', 'permission:permissions.manage', 'permission:roles.manage')")
+    public PermissionDetail updatePermission(@PathVariable UUID permissionId, @RequestParam UUID organizationId,
+            @Valid @RequestBody UpdatePermissionRequest request, @AuthenticationPrincipal Jwt jwt) {
+        return service.updatePermission(permissionId, organizationId, request, UUID.fromString(jwt.getSubject()));
     }
 
     @GetMapping("/organizations")

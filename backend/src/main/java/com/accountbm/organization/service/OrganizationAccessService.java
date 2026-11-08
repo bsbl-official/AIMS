@@ -43,10 +43,12 @@ public class OrganizationAccessService {
                     JOIN user_profiles user_profile ON user_profile.id = membership.user_id
                     JOIN membership_roles membership_role ON membership_role.membership_id = membership.id
                     JOIN role_permissions role_permission ON role_permission.role_id = membership_role.role_id
+                    JOIN permissions permission ON permission.id=role_permission.permission_id AND permission.status='ACTIVE'
+                    JOIN permission_capabilities permission_capability ON permission_capability.permission_id=permission.id
                     WHERE membership.user_id = ? AND membership.organization_id = ?
                       AND user_profile.assigned_organization_id = membership.organization_id
                       AND membership.status = 'ACTIVE'
-                      AND role_permission.permission_code IN (%s)
+                      AND permission_capability.capability_code IN (%s)
                 )
                 """.formatted(placeholders);
         var arguments = new ArrayList<>();

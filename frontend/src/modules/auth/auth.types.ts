@@ -11,6 +11,9 @@ export type CurrentUser = {
   email: string
   displayName: string
   superAdmin: boolean
+  gender: 'MALE' | 'FEMALE' | 'PREFER_NOT_TO_SAY'
+  profilePhotoAvailable: boolean
+  profilePhotoVersion: number
   permissions: string[]
   organizations: OrganizationAccess[]
 }
