@@ -1,5 +1,7 @@
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? '/api'
 
+export const apiUrl = (path: string) => `${API_BASE_URL}${path}`
+
 let refreshAccessToken: (() => Promise<boolean>) | null = null
 let activeRefresh: Promise<boolean> | null = null
 let csrfToken: string | null = null
@@ -52,6 +54,16 @@ export async function request<T>(path: string, init: RequestInit = {}, retry = t
 
   if (response.status === 204) return undefined as T
   return response.json() as Promise<T>
+}
+
+export async function requestBlob(path: string, retry = true): Promise<Blob> {
+  const response = await fetch(apiUrl(path), { credentials: 'include', headers: { Accept: '*/*' } })
+  if (response.status === 401 && retry && refreshAccessToken) {
+    if (!activeRefresh) activeRefresh = refreshAccessToken().finally(() => { activeRefresh = null })
+    if (await activeRefresh) return requestBlob(path, false)
+  }
+  if (!response.ok) throw new ApiError(`Request failed with status ${response.status}`, response.status)
+  return response.blob()
 }
 
 async function getCsrfToken(): Promise<string> {

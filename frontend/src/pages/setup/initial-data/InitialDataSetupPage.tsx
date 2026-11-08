@@ -19,6 +19,7 @@ import type { ProjectCode } from '../../../modules/project-code/project-code.typ
 import { useToast } from '../../../modules/toast/hooks/useToast'
 import { ApiError } from '../../../shared/api/httpClient'
 import { Button } from '../../../shared/components/Button'
+import { AddRowButton } from '../../../shared/components/AddRowButton'
 import { CalendarPicker } from '../../../shared/components/CalendarPicker'
 import { Card } from '../../../shared/components/Card'
 import { DataTable, type Column } from '../../../shared/components/DataTable'
@@ -321,7 +322,7 @@ function InitialDataEditor({ companyId, globalBranchId, initial, entries, onClos
           </div>
           </div>
         </div>
-        <div className="mt-2 overflow-x-auto"><div className="grid min-w-[850px] grid-cols-[minmax(320px,1fr)_140px_140px_140px_48px] gap-2 px-3"><button className="col-start-1 flex cursor-pointer items-center justify-center gap-2 rounded-lg border border-dashed border-[#abc5ba] bg-white/55 py-2.5 text-sm font-normal text-[#315f5c] hover:bg-[#eaf3ef]" type="button" onClick={() => setLines((current) => [...current, draft()])}><Plus className="size-4" />Add Account Head Line</button></div></div>
+        <div className="mt-2 overflow-x-auto"><div className="grid min-w-[850px] grid-cols-[minmax(320px,1fr)_140px_140px_140px_48px] gap-2 px-3"><AddRowButton className="col-start-1" onClick={() => setLines((current) => [...current, draft()])}>Add Account Head Line</AddRowButton></div></div>
         <div className="mt-3 flex flex-wrap justify-end gap-6 text-sm font-normal text-[#294b4e]"><span>Debit total: {money.format(totals.debit)}</span><span>Credit total: {money.format(totals.credit)}</span><span>Balance: {money.format(totals.debit - totals.credit)}</span></div>
       </section>
       {error && <p className="mt-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700" role="alert">{error}</p>}

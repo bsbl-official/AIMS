@@ -1,4 +1,4 @@
-import { Pencil, Plus, Save, Search, Trash2, X } from 'lucide-react'
+import { Pencil, Save, Search, Trash2, X } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useAuth } from '../../../modules/auth/hooks/useAuth'
 import { companyApi } from '../../../modules/company/api/company.api'
@@ -10,6 +10,7 @@ import { ApiError } from '../../../shared/api/httpClient'
 import { Card } from '../../../shared/components/Card'
 import { Modal, ModalActions } from '../../../shared/components/Modal'
 import { Button } from '../../../shared/components/Button'
+import { AddRowButton } from '../../../shared/components/AddRowButton'
 import { PageContainer } from '../../../shared/components/PageContainer'
 import { SearchableSelect } from '../../../shared/components/SearchableSelect'
 import { SkeletonBoundary, TableSkeleton } from '../../../shared/components/Skeleton'
@@ -200,7 +201,7 @@ export function VoucherSetupPage() {
           onUpdateEditing={updateEditing}
           onUpdateNew={updateNew}
         />
-        {canEdit && <button type="button" className="mt-3 flex w-full cursor-pointer items-center justify-center gap-2 rounded-lg border border-dashed border-[#abc5ba] bg-white/55 py-2.5 text-sm text-[#315f5c] hover:bg-[#eaf3ef] disabled:cursor-not-allowed disabled:opacity-50" disabled={!companyId || loading || !contextComplete} onClick={() => setNewRows((current) => [...current, newDraft(context)])}><Plus className="size-4" />Add Voucher Row</button>}
+        {canEdit && <AddRowButton className="mt-3" disabled={!companyId || loading || !contextComplete} onClick={() => setNewRows((current) => [...current, newDraft(context)])}>Add Voucher Row</AddRowButton>}
         </div>
       </SkeletonBoundary>
     </Card>

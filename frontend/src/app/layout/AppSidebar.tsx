@@ -12,6 +12,7 @@ export function AppSidebar({open, onClose}: { open: boolean; onClose: () => void
         {to: '/transactions/debit-vouchers', label: 'Debit Voucher'},
         {to: '/transactions/credit-vouchers', label: 'Credit Voucher'},
         {to: '/transactions/journal-vouchers', label: 'Journal Voucher'},
+        {to: '/transactions/vouchers', label: 'Voucher List'},
     ] : []
     const setupItems: SidebarMenuItem[] = [
         ...(can('companies.read') || can('companies.manage') ? [{to: '/setup/company', label: 'Company setup'}] : []),

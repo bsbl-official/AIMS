@@ -18,9 +18,9 @@ import org.springframework.web.server.ResponseStatusException;
 @Service
 public class VoucherService {
     private static final Map<String,Config> CONFIGS=Map.of(
-            "debit",new Config("DEBIT","a_dr","a_drchild"),
-            "credit",new Config("CREDIT","a_cr","a_crchild"),
-            "journal",new Config("JOURNAL","a_jv","a_jvchild"));
+            "debit",new Config("DEBIT","D","a_dr","a_drchild"),
+            "credit",new Config("CREDIT","C","a_cr","a_crchild"),
+            "journal",new Config("JOURNAL","J","a_jv","a_jvchild"));
     private static final DateTimeFormatter NUMBER_DATE=DateTimeFormatter.BASIC_ISO_DATE;
     private final JdbcTemplate jdbc;
     private final OrganizationAccessService access;
@@ -54,12 +54,57 @@ public class VoucherService {
     }
 
     @Transactional(readOnly=true)
+    public VoucherNumberPreview numberPreview(UUID companyId,String voucherClass,UUID voucherSetupId,LocalDate voucherDate,UUID actor){
+        var c=config(voucherClass); require(companyId,actor,false);
+        var selected=setup(companyId,voucherSetupId,c.voucherClass(),false);
+        if(!selected.autoVoucher()) throw bad("Selected Voucher Control uses manual voucher numbering");
+        Long current=jdbc.queryForObject("SELECT COALESCE((SELECT last_number FROM a_voucher_daily_sequence WHERE voucher_setup_id=? AND voucher_date=?),0)",Long.class,voucherSetupId,voucherDate);
+        return new VoucherNumberPreview(formattedNumber(c.prefix(),voucherDate,(current==null?0:current)+1));
+    }
+
+    @Transactional(readOnly=true)
     public List<VoucherSummary> list(UUID companyId,String voucherClass,String number,LocalDate from,LocalDate to,UUID actor){
         var c=config(voucherClass); require(companyId,actor,false);
         return jdbc.query("SELECT id,voucher_number,voucher_date,voucher_type,document_type,particulars,total_debit,status,version FROM "+c.master()+" WHERE organization_id=? AND (? IS NULL OR lower(voucher_number) LIKE lower(?)) AND (? IS NULL OR voucher_date>=?) AND (? IS NULL OR voucher_date<=?) ORDER BY voucher_date DESC,voucher_number DESC",
                 (rs,n)->new VoucherSummary(rs.getObject("id",UUID.class),rs.getString("voucher_number"),rs.getDate("voucher_date").toLocalDate(),
                         rs.getString("voucher_type"),rs.getString("document_type"),rs.getString("particulars"),rs.getBigDecimal("total_debit"),rs.getString("status"),rs.getLong("version")),
                 companyId,blank(number),blank(number)==null?null:"%"+number.strip()+"%",from,from,to,to);
+    }
+
+    @Transactional(readOnly=true)
+    public List<CombinedVoucherSummary> listAll(UUID companyId,UUID branchId,String number,LocalDate from,LocalDate to,String voucherClass,UUID actor){
+        require(companyId,actor,false);
+        if(from!=null&&to!=null&&from.isAfter(to)) throw bad("From date must not be after To date");
+        StringBuilder query=new StringBuilder("""
+                SELECT id,voucher_class,voucher_number,voucher_date,voucher_type,document_type,particulars,
+                       total_debit,status,version
+                FROM (
+                    SELECT id,'debit' voucher_class,voucher_number,voucher_date,voucher_type,document_type,
+                           particulars,total_debit,status,version,organization_id,branch_id FROM a_dr
+                    UNION ALL
+                    SELECT id,'credit',voucher_number,voucher_date,voucher_type,document_type,
+                           particulars,total_debit,status,version,organization_id,branch_id FROM a_cr
+                    UNION ALL
+                    SELECT id,'journal',voucher_number,voucher_date,voucher_type,document_type,
+                           particulars,total_debit,status,version,organization_id,branch_id FROM a_jv
+                ) voucher
+                WHERE organization_id=? AND branch_id=?
+                """);
+        List<Object> parameters=new ArrayList<>(); parameters.add(companyId); parameters.add(branchId);
+        String search=blank(number);
+        if(search!=null){query.append(" AND lower(voucher_number) LIKE lower(?)");parameters.add("%"+search+"%");}
+        if(from!=null){query.append(" AND voucher_date>=?");parameters.add(from);}
+        if(to!=null){query.append(" AND voucher_date<=?");parameters.add(to);}
+        if(blank(voucherClass)!=null){
+            config(voucherClass);
+            query.append(" AND voucher_class=?");parameters.add(voucherClass.strip().toLowerCase(Locale.ROOT));
+        }
+        query.append(" ORDER BY voucher_date DESC,voucher_number DESC,voucher_class");
+        return jdbc.query(query.toString(),(rs,n)->new CombinedVoucherSummary(rs.getObject("id",UUID.class),
+                        rs.getString("voucher_class"),rs.getString("voucher_number"),date(rs,"voucher_date"),
+                        rs.getString("voucher_type"),rs.getString("document_type"),rs.getString("particulars"),
+                        rs.getBigDecimal("total_debit"),rs.getString("status"),rs.getLong("version")),
+                parameters.toArray());
     }
 
     @Transactional(readOnly=true)
@@ -77,7 +122,7 @@ public class VoucherService {
         var c=config(voucherClass); require(companyId,actor,true);
         var setup=setup(companyId,request.voucherSetupId(),c.voucherClass(),true);
         var totals=validateLines(companyId,setup,request.lines());
-        String number=setup.autoVoucher()?allocateNumber(setup,request.voucherDate()):required(request.voucherNumber(),"Voucher number",20);
+        String number=setup.autoVoucher()?allocateNumber(c,setup,request.voucherDate()):normalizeNumber(c,request.voucherNumber());
         UUID id=UUID.randomUUID();
         try{
             jdbc.update("INSERT INTO "+c.master()+" (id,organization_id,voucher_setup_id,branch_id,project_code_id,finance_code_id,component_code_id,coa_id,company_code,company_branch_code,project_code,finance_code,component_code,voucher_number,voucher_date,voucher_class,voucher_type,document_type,particulars,party_code,paid_to,cheque_number,cheque_date,bank_code,bank_branch_code,reference_bill_number,reference_bill_date,month_year,total_debit,total_credit,ins_user) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
@@ -108,6 +153,50 @@ public class VoucherService {
     }
 
     @Transactional
+    public VoucherResponse fullUpdate(UUID companyId,String sourceClass,UUID id,FullUpdateVoucherRequest request,VoucherPhoto replacement,UUID actor){
+        Config source=config(sourceClass),target=config(request.voucherClass()); require(companyId,actor,true);
+        VoucherResponse existing=find(source,companyId,id);
+        if(!"DRAFT".equals(existing.status())) throw conflict("Only draft vouchers can be edited");
+        if(existing.version()!=request.version()) throw conflict("Voucher was changed by another user; reload and try again");
+        Setup targetSetup=setup(companyId,request.voucherSetupId(),target.voucherClass(),true);
+        Totals totals=validateLines(companyId,targetSetup,request.lines());
+        boolean identityChanged=!source.master().equals(target.master())
+                || !existing.voucherSetupId().equals(request.voucherSetupId())
+                || !existing.voucherDate().equals(request.voucherDate());
+        String submitted=clean(request.voucherNumber());
+        String number=targetSetup.autoVoucher()
+                ? identityChanged?allocateNumber(target,targetSetup,request.voucherDate()):existing.voucherNumber()
+                : !identityChanged&&Objects.equals(submitted,existing.voucherNumber())?existing.voucherNumber():normalizeNumber(target,submitted);
+        StoredPhoto photo=replacement!=null
+                ?new StoredPhoto(replacement.data(),replacement.name(),replacement.contentType(),replacement.data().length)
+                :request.removePhoto()?null:storedPhoto(source,companyId,id);
+        try{
+            if(source.master().equals(target.master())){
+                int changed=jdbc.update("UPDATE "+source.master()+" SET voucher_setup_id=?,branch_id=?,project_code_id=?,finance_code_id=?,component_code_id=?,coa_id=?,company_code=?,company_branch_code=?,project_code=?,finance_code=?,component_code=?,voucher_number=?,voucher_date=?,voucher_class=?,voucher_type=?,document_type=?,particulars=?,party_code=?,paid_to=?,cheque_number=?,cheque_date=?,bank_code=?,bank_branch_code=?,reference_bill_number=?,reference_bill_date=?,month_year=?,total_debit=?,total_credit=?,photo_data=?,photo_name=?,photo_content_type=?,photo_size=?,upd_user=?,upd_date=clock_timestamp(),version=version+1 WHERE organization_id=? AND id=? AND status='DRAFT' AND version=?",
+                        targetSetup.id(),targetSetup.branchId(),targetSetup.projectId(),targetSetup.financeId(),targetSetup.componentId(),targetSetup.coaId(),targetSetup.companyCode(),targetSetup.branchCode(),
+                        targetSetup.projectId().toString(),targetSetup.financeId().toString(),targetSetup.componentId().toString(),number,request.voucherDate(),target.voucherClass(),targetSetup.voucherType(),targetSetup.documentType(),
+                        clean(request.particulars()),clean(request.partyCode()),clean(request.paidTo()),clean(request.chequeNumber()),request.chequeDate(),clean(request.bankCode()),clean(request.bankBranchCode()),
+                        clean(request.referenceBillNumber()),request.referenceBillDate(),monthYear(request.voucherDate()),totals.debit(),totals.credit(),photo==null?null:photo.data(),photo==null?null:photo.name(),
+                        photo==null?null:photo.contentType(),photo==null?null:photo.size(),actor.toString(),companyId,id,request.version());
+                if(changed==0) throw conflict("Voucher was changed by another user; reload and try again");
+                jdbc.update("DELETE FROM "+source.child()+" WHERE organization_id=? AND voucher_id=?",companyId,id);
+                insertLines(source,companyId,id,targetSetup,request.lines(),actor);
+            }else{
+                jdbc.update("INSERT INTO "+target.master()+" (id,organization_id,voucher_setup_id,branch_id,project_code_id,finance_code_id,component_code_id,coa_id,company_code,company_branch_code,project_code,finance_code,component_code,voucher_number,voucher_date,voucher_class,voucher_type,document_type,particulars,party_code,paid_to,cheque_number,cheque_date,bank_code,bank_branch_code,reference_bill_number,reference_bill_date,month_year,total_debit,total_credit,photo_data,photo_name,photo_content_type,photo_size,ins_user,ins_date,upd_user,upd_date,version) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,clock_timestamp(),?)",
+                        id,companyId,targetSetup.id(),targetSetup.branchId(),targetSetup.projectId(),targetSetup.financeId(),targetSetup.componentId(),targetSetup.coaId(),targetSetup.companyCode(),targetSetup.branchCode(),
+                        targetSetup.projectId().toString(),targetSetup.financeId().toString(),targetSetup.componentId().toString(),number,request.voucherDate(),target.voucherClass(),targetSetup.voucherType(),targetSetup.documentType(),
+                        clean(request.particulars()),clean(request.partyCode()),clean(request.paidTo()),clean(request.chequeNumber()),request.chequeDate(),clean(request.bankCode()),clean(request.bankBranchCode()),
+                        clean(request.referenceBillNumber()),request.referenceBillDate(),monthYear(request.voucherDate()),totals.debit(),totals.credit(),photo==null?null:photo.data(),photo==null?null:photo.name(),
+                        photo==null?null:photo.contentType(),photo==null?null:photo.size(),existing.insertedBy(),Timestamp.from(existing.insertedAt()),actor.toString(),existing.version()+1);
+                insertLines(target,companyId,id,targetSetup,request.lines(),actor);
+                int removed=jdbc.update("DELETE FROM "+source.master()+" WHERE organization_id=? AND id=? AND status='DRAFT' AND version=?",companyId,id,request.version());
+                if(removed==0) throw conflict("Voucher was changed by another user; reload and try again");
+            }
+        }catch(DataIntegrityViolationException e){throw conflict("Voucher number already exists or an accounting reference is invalid");}
+        audit(companyId,actor,"VOUCHER_UPDATED",target.voucherClass(),id); return find(target,companyId,id);
+    }
+
+    @Transactional
     public void delete(UUID companyId,String voucherClass,UUID id,UUID actor){
         var c=config(voucherClass); require(companyId,actor,true);
         if(jdbc.update("DELETE FROM "+c.master()+" WHERE organization_id=? AND id=? AND status='DRAFT'",companyId,id)==0)
@@ -122,6 +211,12 @@ public class VoucherService {
                 (rs,n)->new VoucherPhoto(rs.getBytes("photo_data"),rs.getString("photo_name"),rs.getString("photo_content_type")),companyId,id);
         if(rows.isEmpty()) throw new ResponseStatusException(HttpStatus.NOT_FOUND,"Voucher photo was not found");
         return rows.getFirst();
+    }
+
+    private StoredPhoto storedPhoto(Config config,UUID companyId,UUID id){
+        var rows=jdbc.query("SELECT photo_data,photo_name,photo_content_type,photo_size FROM "+config.master()+" WHERE organization_id=? AND id=? AND photo_data IS NOT NULL",
+                (rs,n)->new StoredPhoto(rs.getBytes("photo_data"),rs.getString("photo_name"),rs.getString("photo_content_type"),rs.getInt("photo_size")),companyId,id);
+        return rows.isEmpty()?null:rows.getFirst();
     }
 
     private Totals validateLines(UUID companyId,Setup setup,List<VoucherLineRequest> lines){
@@ -147,10 +242,10 @@ public class VoucherService {
         }
     }
 
-    private String allocateNumber(Setup setup,LocalDate date){
+    private String allocateNumber(Config config,Setup setup,LocalDate date){
         Long next=jdbc.queryForObject("INSERT INTO a_voucher_daily_sequence(voucher_setup_id,voucher_date,last_number) VALUES (?,?,1) ON CONFLICT(voucher_setup_id,voucher_date) DO UPDATE SET last_number=a_voucher_daily_sequence.last_number+1 RETURNING last_number",Long.class,setup.id(),date);
         jdbc.update("UPDATE a_vr_type SET voucher_last_no=?,voucher_last_date=?,upd_date=clock_timestamp() WHERE id=?",next,date,setup.id());
-        return NUMBER_DATE.format(date)+"/"+String.format(Locale.ROOT,"%02d",next);
+        return formattedNumber(config.prefix(),date,next);
     }
 
     private Setup setup(UUID companyId,UUID id,String voucherClass,boolean lock){
@@ -177,6 +272,15 @@ public class VoucherService {
     private String companyCode(UUID company){var rows=jdbc.queryForList("SELECT code FROM organizations WHERE id=?",String.class,company);if(rows.isEmpty())throw bad("Company not found");return rows.getFirst();}
     private void audit(UUID company,UUID actor,String action,String type,UUID id){jdbc.update("INSERT INTO audit_events(organization_id,actor_user_id,action,entity_type,entity_id) VALUES (?,?,?,?,?)",company,actor,action,type+"_VOUCHER",id.toString());}
     private static Config config(String value){var c=CONFIGS.get(value.toLowerCase(Locale.ROOT));if(c==null)throw bad("Voucher class must be debit, credit, or journal");return c;}
+    private static String normalizeNumber(Config config,String value){
+        String number=required(value,"Voucher number",20).toUpperCase(Locale.ROOT);
+        if(number.matches("^[DCJ].*")&&!number.startsWith(config.prefix())) throw bad("Voucher number must start with "+config.prefix());
+        String result=number.startsWith(config.prefix())?number:config.prefix()+number;
+        if(result.length()>20) throw bad("Voucher number is too long");
+        return result;
+    }
+    static String normalizeNumber(String voucherClass,String value){return normalizeNumber(config(voucherClass),value);}
+    static String formattedNumber(String prefix,LocalDate date,long sequence){return prefix+NUMBER_DATE.format(date)+"/"+String.format(Locale.ROOT,"%02d",sequence);}
     private static String required(String value,String label,int max){String v=clean(value);if(v==null)throw bad(label+" is required");if(v.length()>max)throw bad(label+" is too long");return v;}
     private static String clean(String v){return v==null||v.isBlank()?null:v.strip();}
     private static String blank(String v){return clean(v);}
@@ -185,8 +289,9 @@ public class VoucherService {
     private static java.time.Instant instant(Timestamp t){return t==null?null:t.toInstant();}
     private static ResponseStatusException bad(String m){return new ResponseStatusException(HttpStatus.BAD_REQUEST,m);}
     private static ResponseStatusException conflict(String m){return new ResponseStatusException(HttpStatus.CONFLICT,m);}
-    private record Config(String voucherClass,String master,String child){}
+    private record Config(String voucherClass,String prefix,String master,String child){}
     private record Setup(UUID id,UUID branchId,Integer projectId,Integer financeId,Integer componentId,Long coaId,String companyCode,String branchCode,String voucherType,String documentType,boolean autoVoucher){}
     private record Totals(BigDecimal debit,BigDecimal credit){}
+    private record StoredPhoto(byte[] data,String name,String contentType,int size){}
     public record VoucherPhoto(byte[] data,String name,String contentType){}
 }

@@ -12,7 +12,9 @@ export type VoucherSetupOption = {
 }
 export type AccountHeadOption = { coaId:number; l1Code:string; l2Code:string; l3Code:string; l4Code:string; l5Code:string; name:string }
 export type VoucherOptions = { voucherSetups:VoucherSetupOption[]; accountHeads:AccountHeadOption[] }
+export type VoucherNumberPreview = { voucherNumber:string }
 export type VoucherSummary = { id:string; voucherNumber:string; voucherDate:string; voucherType:string; documentType:string; particulars:string; amount:number; status:string; version:number }
+export type CombinedVoucherSummary = VoucherSummary & { voucherClass:VoucherClass }
 export type VoucherLine = VoucherLineInput & { id:string; lineNumber:number; accountHead:string }
 export type Voucher = {
   id:string; companyId:string; voucherSetupId:string; branchId:string; branchCode:string; branchName:string
@@ -29,3 +31,4 @@ export type VoucherCreate = {
   referenceBillNumber:string|null; referenceBillDate:string|null; lines:VoucherLineInput[]
 }
 export type VoucherUpdate = Omit<VoucherCreate,'voucherSetupId'|'voucherDate'|'voucherNumber'> & { version:number }
+export type VoucherFullUpdate = VoucherCreate & { voucherClass:VoucherClass; removePhoto:boolean; version:number }

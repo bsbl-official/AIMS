@@ -6,6 +6,7 @@ import { DashboardPage } from '../pages/DashboardPage'
 import { DebitVoucherPage } from '../pages/transactions/DebitVoucherPage'
 import { CreditVoucherPage } from '../pages/transactions/CreditVoucherPage'
 import { JournalVoucherPage } from '../pages/transactions/JournalVoucherPage'
+import { VoucherListPage } from '../pages/transactions/VoucherListPage'
 import { LoginPage } from '../pages/auth/LoginPage'
 import { ProtectedRoute } from '../modules/auth/ProtectedRoute'
 import { UserManagementPage } from '../pages/user-management/UserManagementPage'
@@ -31,6 +32,7 @@ export function App() {
           <Route path="accounts" element={<Navigate to="/setup/initial-coa" replace />} />
           <Route path="setup/chart-of-accounts" element={<AccountLayersPage />} />
           <Route path="journals" element={<Navigate to="/transactions/journal-vouchers" replace />} />
+          <Route path="transactions/vouchers" element={<VoucherListPage />} />
           <Route path="transactions/debit-vouchers" element={<DebitVoucherPage />} />
           <Route path="transactions/credit-vouchers" element={<CreditVoucherPage />} />
           <Route path="transactions/journal-vouchers" element={<JournalVoucherPage />} />

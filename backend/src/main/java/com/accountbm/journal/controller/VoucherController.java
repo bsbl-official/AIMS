@@ -29,6 +29,14 @@ public class VoucherController {
     public VoucherOptions options(@PathVariable UUID companyId, @PathVariable String voucherClass,
             @AuthenticationPrincipal Jwt jwt) { return service.options(companyId, voucherClass, actor(jwt)); }
 
+    @GetMapping("/number-preview")
+    @PreAuthorize("hasAnyAuthority('permission:*','permission:journal.read','permission:journal.create')")
+    public VoucherNumberPreview numberPreview(@PathVariable UUID companyId, @PathVariable String voucherClass,
+            @RequestParam UUID voucherSetupId, @RequestParam LocalDate voucherDate,
+            @AuthenticationPrincipal Jwt jwt) {
+        return service.numberPreview(companyId, voucherClass, voucherSetupId, voucherDate, actor(jwt));
+    }
+
     @GetMapping
     @PreAuthorize("hasAnyAuthority('permission:*','permission:journal.read','permission:journal.create')")
     public List<VoucherSummary> list(@PathVariable UUID companyId, @PathVariable String voucherClass,
@@ -74,6 +82,14 @@ public class VoucherController {
     public VoucherResponse update(@PathVariable UUID companyId, @PathVariable String voucherClass,
             @PathVariable UUID id, @Valid @RequestBody UpdateVoucherRequest request,
             @AuthenticationPrincipal Jwt jwt) { return service.update(companyId,voucherClass,id,request,actor(jwt)); }
+
+    @PutMapping(value="/{id}/full",consumes=MediaType.MULTIPART_FORM_DATA_VALUE)
+    @PreAuthorize("hasAnyAuthority('permission:*','permission:journal.create')")
+    public VoucherResponse fullUpdate(@PathVariable UUID companyId,@PathVariable String voucherClass,
+            @PathVariable UUID id,@Valid @RequestPart("voucher") FullUpdateVoucherRequest request,
+            @RequestPart(value="photo",required=false) MultipartFile photo,@AuthenticationPrincipal Jwt jwt) {
+        return service.fullUpdate(companyId,voucherClass,id,request,validatedPhoto(photo),actor(jwt));
+    }
 
     @DeleteMapping("/{id}")
     @PreAuthorize("hasAnyAuthority('permission:*','permission:journal.create')")
