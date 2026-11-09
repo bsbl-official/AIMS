@@ -12,8 +12,10 @@ export function LoginPage() {
   const toast = useToast()
   const navigate = useNavigate()
   const location = useLocation()
-  const [email, setEmail] = useState('admin@accountbm.local')
+  const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
+  const [mfaCode, setMfaCode] = useState('')
+  const [mfaRequired, setMfaRequired] = useState(false)
   const [submitting, setSubmitting] = useState(false)
 
   if (user) return <Navigate to="/" replace />
@@ -22,11 +24,16 @@ export function LoginPage() {
     event.preventDefault()
     setSubmitting(true)
     try {
-      await login(email, password)
+      await login(email, password, mfaRequired ? mfaCode : undefined)
       toast.success('You are now signed in to AIMS.', 'Welcome back')
       const next = (location.state as { from?: string } | null)?.from ?? '/'
       navigate(next, { replace: true })
     } catch (reason) {
+      if (reason instanceof ApiError && reason.status === 428) {
+        setMfaRequired(true)
+        toast.error('Enter the code from your authenticator app or a recovery code.', 'Verification required')
+        return
+      }
       toast.error(reason instanceof ApiError ? reason.message : 'Unable to sign in. Please try again.', 'Sign in failed')
     } finally {
       setSubmitting(false)
@@ -42,6 +49,7 @@ export function LoginPage() {
         <form className="grid gap-[18px]" onSubmit={submit}>
           <label className="grid gap-[7px] text-[13px] font-medium text-[#405653]">Email address<input className="w-full rounded-lg border border-[#ccd5d0] bg-white px-3 py-[11px] text-[#203236] outline-none focus:border-[#347077] focus:shadow-[0_0_0_3px_rgba(52,112,119,.12)]" type="email" autoComplete="username" value={email} onChange={(event) => setEmail(event.target.value)} required /></label>
           <PasswordInput label="Password" autoComplete="current-password" value={password} onChange={(event) => setPassword(event.target.value)} required />
+          {mfaRequired && <label className="grid gap-[7px] text-[13px] font-medium text-[#405653]">Verification code<input className="w-full rounded-lg border border-[#ccd5d0] bg-white px-3 py-[11px] text-[#203236] outline-none focus:border-[#347077] focus:shadow-[0_0_0_3px_rgba(52,112,119,.12)]" autoComplete="one-time-code" inputMode="numeric" maxLength={20} value={mfaCode} onChange={(event) => setMfaCode(event.target.value)} required autoFocus /></label>}
           <Button className="mt-1.5 w-full" type="submit" disabled={submitting}>{submitting ? 'Signing in...' : 'Sign in'}</Button>
         </form>
       </section>

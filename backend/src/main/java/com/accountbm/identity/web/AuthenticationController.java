@@ -5,6 +5,7 @@ import static com.accountbm.identity.dto.IdentityDtos.*;
 import java.util.UUID;
 
 import com.accountbm.identity.service.AuthenticationService;
+import com.accountbm.common.web.ClientIpResolver;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import org.springframework.beans.factory.annotation.Value;
@@ -31,13 +32,16 @@ public class AuthenticationController {
     private final long refreshTokenDays;
     private final boolean secureCookies;
     private final String sameSite;
+    private final ClientIpResolver clientIpResolver;
 
     public AuthenticationController(
             AuthenticationService authenticationService,
+            ClientIpResolver clientIpResolver,
             @Value("${app.jwt.refresh-token-days}") long refreshTokenDays,
             @Value("${app.auth-cookie.secure}") boolean secureCookies,
             @Value("${app.auth-cookie.same-site}") String sameSite) {
         this.authenticationService = authenticationService;
+        this.clientIpResolver = clientIpResolver;
         this.refreshTokenDays = refreshTokenDays;
         this.secureCookies = secureCookies;
         this.sameSite = sameSite;
@@ -45,14 +49,14 @@ public class AuthenticationController {
 
     @PostMapping("/login")
     public ResponseEntity<AuthResponse> login(@Valid @RequestBody LoginRequest request, HttpServletRequest httpRequest) {
-        return authenticated(authenticationService.login(request, clientIp(httpRequest), httpRequest.getHeader("User-Agent")));
+        return authenticated(authenticationService.login(request, clientIpResolver.resolve(httpRequest), httpRequest.getHeader("User-Agent")));
     }
 
     @PostMapping("/refresh")
     public ResponseEntity<AuthResponse> refresh(
             @CookieValue(name = REFRESH_TOKEN_COOKIE) String refreshToken,
             HttpServletRequest httpRequest) {
-        return authenticated(authenticationService.refresh(refreshToken, clientIp(httpRequest), httpRequest.getHeader("User-Agent")));
+        return authenticated(authenticationService.refresh(refreshToken, clientIpResolver.resolve(httpRequest), httpRequest.getHeader("User-Agent")));
     }
 
     @PostMapping("/logout")
@@ -73,11 +77,6 @@ public class AuthenticationController {
     @GetMapping("/me")
     public CurrentUser me(@AuthenticationPrincipal Jwt jwt) {
         return authenticationService.currentUser(UUID.fromString(jwt.getSubject()));
-    }
-
-    private static String clientIp(HttpServletRequest request) {
-        var forwarded = request.getHeader("X-Forwarded-For");
-        return forwarded == null || forwarded.isBlank() ? request.getRemoteAddr() : forwarded.split(",")[0].trim();
     }
 
     private ResponseEntity<AuthResponse> authenticated(TokenResponse tokens) {

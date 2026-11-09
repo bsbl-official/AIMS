@@ -16,7 +16,8 @@ import jakarta.validation.constraints.Size;
 public final class IdentityDtos {
     private IdentityDtos() {}
 
-    public record LoginRequest(@Email @NotBlank String email, @NotBlank String password) {}
+    public record LoginRequest(@Email @NotBlank String email, @NotBlank String password,
+                               @Size(max=20) String mfaCode) {}
     public record TokenResponse(
             String accessToken,
             String refreshToken,

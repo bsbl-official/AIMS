@@ -112,6 +112,7 @@ public class ApiExceptionHandler {
         problem.setType(URI.create("urn:account-bm:problem:" + type));
         problem.setInstance(URI.create(request.getRequestURI()));
         problem.setProperty("timestamp", java.time.Instant.now());
+        problem.setProperty("requestId", request.getAttribute(RequestCorrelationFilter.ATTRIBUTE));
         return problem;
     }
 }

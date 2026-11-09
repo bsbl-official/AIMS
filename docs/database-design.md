@@ -1,6 +1,6 @@
 # Database design
 
-The accounting schema is designed for an accrual-based, double-entry general ledger. PostgreSQL is the system of record. Flyway owns all schema changes; Hibernate only validates mappings. The target deployment places this accounting schema in a separate database for each company; platform identity and company routing stay in the control database described in [database-per-company-architecture.md](database-per-company-architecture.md).
+The accounting schema is designed for an accrual-based, double-entry general ledger. PostgreSQL is the system of record. Flyway owns all schema changes; Hibernate only validates mappings. Platform identity and every company's accounting data share one database, with `organization_id` and organization-aware foreign keys enforcing company boundaries.
 
 ```mermaid
 erDiagram
@@ -40,11 +40,11 @@ erDiagram
 
 The journal balance checks are deferred until transaction commit. This allows a service to insert or update all voucher lines atomically while preventing any unbalanced posted journal from committing. Voucher number allocation uses `journal_sequences` and must lock its row with `SELECT ... FOR UPDATE`; API commands should also carry an idempotency key when posting or importing.
 
-## Concurrency and tenant isolation
+## Concurrency and organization isolation
 
 Every mutable aggregate has a `version` column for optimistic locking. Posting services should use one short `READ COMMITTED` transaction, lock the journal and sequence rows, re-check period and approval state, calculate totals, and set the journal to `POSTED`. Database constraints remain the final line of defense.
 
-The checked-in V1-V6 migration lineage represents the current shared-database implementation and uses `organization_id` plus composite tenant-aware foreign keys. It is the source for the controlled migration to database-per-company isolation; its history must not be rewritten. The target tenant schema removes the discriminator because the physical database becomes the tenant boundary. `organization_id` checks remain required until each module has been switched and reconciled.
+The checked-in migration lineage uses `organization_id` plus composite organization-aware foreign keys and must not be rewritten. Every company-scoped table, query, uniqueness rule, and relationship must retain that discriminator so one organization's identifiers can never resolve to another organization's data.
 
 ## Reporting approach
 

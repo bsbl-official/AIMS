@@ -2,16 +2,16 @@
 
 **Audit date:** 2026-11-08  
 **Baseline:** current working tree, including the uncommitted profile and dynamic-permission work  
-**Target:** financial-grade, multi-company accounting product with a platform database and one tenant database per company
+**Target:** financial-grade, multi-company accounting product using one organization-scoped PostgreSQL database
 
 ## Executive verdict
 
 **NO-GO for production financial use.** The application is a promising development-stage foundation, but it is not yet a complete or sufficiently verified accounting system. Four release blockers must be resolved before production:
 
 1. The application writes vouchers to a second, legacy-shaped ledger that only supports `DRAFT`; the stronger posting, period, immutability, and balance controls attached to `journals`/`journal_lines` are therefore not used by the active voucher workflow.
-2. The documented database-per-company architecture is not implemented. The live application still uses one shared database, and numeric project/finance/component IDs are global primary keys, preventing normal code reuse across companies.
+2. Organization isolation is incomplete: numeric project/finance/component IDs are global primary keys, preventing normal code reuse across companies, and several redundant copied codes are not protected by matching constraints.
 3. Production can start with known development secrets, and the bootstrap process promotes the configured email to super administrator on every startup.
-4. Verification is far below the standard required for financial software: three unit tests, no frontend tests, no integration/tenant-isolation tests, no CI pipeline, and no demonstrated backup restore or disaster-recovery test.
+4. Verification is far below the standard required for financial software: three unit tests, no frontend tests, no integration/cross-organization isolation tests, no CI pipeline, and no demonstrated backup restore or disaster-recovery test.
 
 The system should be treated as an internal alpha until the P0 items and their acceptance tests are complete.
 
@@ -44,7 +44,7 @@ Limitations:
 - JWT signing secrets shorter than 32 bytes stop application startup.
 - Most SQL values are parameterized. Dynamic voucher table names come from a fixed internal map rather than request input.
 - Method-level capability checks are broadly applied, and service-layer company checks add a useful second authorization boundary.
-- The original ledger schema has good financial controls: tenant-aware foreign keys, deferred balance validation, open-period checks, posted-record immutability, reversal support, and append-only audit events.
+- The original ledger schema has good financial controls: organization-aware foreign keys, deferred balance validation, open-period checks, posted-record immutability, reversal support, and append-only audit events.
 - Monetary columns use exact numeric types, and mutable setup records generally use optimistic versions.
 - Flyway owns schema changes while Hibernate validates, open-in-view is disabled, shutdown is graceful, and health probes are configured.
 - Runtime containers use non-root users; the backend filesystem is read-only in Compose.
@@ -55,7 +55,7 @@ Limitations:
 | ID | Priority | Area | Finding | Production impact |
 |---|---|---|---|---|
 | AIMS-001 | P0 | Accounting | Active vouchers bypass the controlled ledger and can never progress beyond `DRAFT`. | No complete posting, approval, reversal, or period-close workflow. |
-| AIMS-002 | P0 | Tenancy/database | Database-per-company is documentation only; current IDs and tables are shared. | Isolation target is unmet and code values collide between companies. |
+| AIMS-002 | P0 | Organization isolation | Several IDs are globally scoped and redundant company codes are weakly constrained. | Code values collide between companies and inconsistent cross-company combinations can be represented. |
 | AIMS-003 | P0 | Security/config | Known fallback secrets and unconditional super-admin bootstrap are accepted. | A configuration mistake can expose a privileged account or predictable JWT key. |
 | AIMS-004 | P0 | Quality/operations | Automated verification, CI, restore evidence, and release controls are missing. | Financial correctness and safe recovery cannot be demonstrated. |
 | AIMS-005 | P1 | Authorization | Company permission checks do not enforce a user's assigned branch scope. | A user can potentially access another branch in the same company. |
@@ -65,7 +65,7 @@ Limitations:
 | AIMS-009 | P1 | Security | Client IP is derived from the first untrusted `X-Forwarded-For` value. | Audit evidence and any IP control can be spoofed. |
 | AIMS-010 | P1 | API/performance | List endpoints are unpaginated and commonly return complete setup/transaction collections. | Latency, memory, and database load grow without a bound. |
 | AIMS-011 | P1 | Operations | No production TLS gateway policy, secrets manager, resource limits, SBOM, Java/container scan, or immutable image pinning. | Deployment security and repeatability are not controlled. |
-| AIMS-012 | P1 | Recovery | No documented and tested RPO/RTO, PITR, tenant restore, or migration rollback procedure. | Data recovery cannot be promised. |
+| AIMS-012 | P1 | Recovery | No documented and tested RPO/RTO, PITR, organization-level recovery, or migration rollback procedure. | Data recovery cannot be promised. |
 | AIMS-013 | P2 | Attachments | Images are stored as database `bytea`; validation is only MIME plus short magic-byte checks. | Database growth, backup cost, and malicious-file risk increase. |
 | AIMS-014 | P2 | Audit/observability | Audit coverage is selective; logs lack a defined request/correlation contract and metrics lack production export/alerts. | Incidents and financial changes are difficult to reconstruct. |
 | AIMS-015 | P2 | UX/completeness | Dashboard values are hard-coded sample data. | Users can mistake sample balances for real financial information. |
@@ -93,7 +93,7 @@ This is the largest correctness risk. A balanced draft is not a posted accountin
 
 ### AIMS-002 and AIMS-006 — tenancy and redundancy (P0/P1)
 
-The runtime has one datasource and one Flyway location. The target platform/tenant topology in `docs/database-per-company-architecture.md` is not implemented.
+The runtime intentionally uses one datasource and one Flyway migration lineage. Isolation therefore depends on consistently scoped identifiers, queries, constraints, and authorization.
 
 Current relational problems include:
 
@@ -107,16 +107,8 @@ Current relational problems include:
 
 ### Recommended canonical database
 
-**Platform database**
-
-- `users`, credentials/MFA factors, refresh sessions, companies, memberships, roles, permissions, branch-access metadata, provisioning jobs, tenant registry, platform audit, and platform outbox.
-- Store an immutable random `tenant_key`, database status, schema version, and secret reference. Never derive database names from editable company names/codes.
-- Runtime credentials must not have `CREATEDB`; provisioning uses a separate restricted credential.
-
-**Tenant database**
-
-- `company_profile`, `branches`, `dimension_types`, `dimension_values`, `fiscal_years`, `accounting_periods`, `accounts`, `vouchers`, `voucher_lines`, `voucher_sequences`, `opening_balance_batches`, `opening_balance_lines`, `report_nodes`, `report_account_mappings`, `attachments`, `audit_events`, and `outbox_events`.
-- Remove `organization_id` inside a tenant database. Use surrogate immutable IDs and unique business codes scoped to their parent, e.g. `UNIQUE(project_id, code)`.
+- Keep identity, access control, company setup, accounting, audit, and outbox records in one PostgreSQL database.
+- Require `organization_id` on every company-owned aggregate and include it in foreign keys and uniqueness rules. Use surrogate immutable IDs and unique business codes scoped to their organization and parent, e.g. `UNIQUE(organization_id, project_id, code)`.
 - Use one account adjacency tree (`accounts.parent_id`) rather than one table per level. Enforce cycle/depth/posting rules as already demonstrated in V2.
 - Use one reporting-node hierarchy with a parent ID. Store each description once and map leaf nodes to accounts; use typed boolean/enum columns instead of free-form flags.
 - Treat opening balances as immutable batches plus lines. Calculate cumulative balances from posted ledger entries or controlled projections, not user-editable cumulative columns.
@@ -125,14 +117,13 @@ Current relational problems include:
 
 ### Migration approach
 
-Do not edit V1-V29. Introduce separate platform and tenant migration lineages.
+Do not rewrite applied migrations. Add forward migrations that normalize organization-aware keys and the canonical ledger incrementally.
 
-1. Add tenant registry/provisioning state to the platform database.
-2. Build an idempotent tenant provisioner and canonical tenant schema.
-3. For each company, copy dimensions, COA, opening balances, setup, drafts, and any journals in dependency order.
+1. Add missing organization-aware unique constraints and composite foreign keys.
+2. Build the canonical organization-scoped accounting schema and service workflow.
+3. For each company, copy dimensions, COA, opening balances, setup, drafts, and journals in dependency order.
 4. Reconcile row counts; per-account opening balances; voucher debit/credit totals; sequence maxima; attachment hashes; and aggregate hashes.
-5. Put one company into a short maintenance window, copy the delta, rerun reconciliation, and switch routing.
-6. Keep shared rows read-only for an agreed verification period. Archive and remove them only after signed reconciliation and tested backup restore.
+5. Switch one company at a time after reconciliation, while retaining one physical database and one transaction boundary.
 
 Avoid indefinite dual writes between the old and new ledgers. They create a new reconciliation problem and can silently diverge.
 
@@ -149,7 +140,7 @@ Avoid indefinite dual writes between the old and new ledgers. They create a new 
 
 ### AIMS-004 — verification and delivery controls (P0)
 
-The repository has one test class with three pure unit tests. There are no frontend tests or CI definitions. No test proves migrations, tenant isolation, authentication, authorization, voucher transactions, concurrency, or database invariants.
+The repository has one test class with three pure unit tests. There are no frontend tests or CI definitions. No test proves migrations, cross-organization isolation, authentication, authorization, voucher transactions, concurrency, or database invariants.
 
 **Minimum release gates:**
 
@@ -167,13 +158,13 @@ The repository has one test class with three pure unit tests. There are no front
 
 JWTs contain allowed branch IDs, and `membership_branches` exists, but `OrganizationAccessService.requireCompanyPermission` checks company membership and capabilities only. Voucher and setup services accept a company ID and then allow selection of branches within that company without consistently checking the actor's assigned branch set. UI filtering is not a security boundary.
 
-**Remediation:** require branch scope in every branch-bound service operation. Centralize an `AccessScope` containing actor, company, allowed branches, and capabilities; validate it before selecting a tenant datasource and again in tenant commands. Add negative tests that enumerate IDs belonging to another branch and company.
+**Remediation:** require branch scope in every branch-bound service operation. Centralize an `AccessScope` containing actor, company, allowed branches, and capabilities; validate it before every company- or branch-scoped command. Add negative tests that enumerate IDs belonging to another branch and company.
 
 ### AIMS-007 — idempotency and financial concurrency (P1)
 
 CORS allows `Idempotency-Key`, but voucher endpoints do not consume or persist it. Automatic daily sequence allocation is atomic, but client retries can still create multiple vouchers with different sequence numbers. Manual numbering uniqueness is scoped to voucher setup rather than a clearly documented legal numbering scope.
 
-**Remediation:** store `(tenant, operation, idempotency_key, request_hash, result_reference, status, expires_at)` in the same transaction as creation/posting. A repeated identical request returns the original result; a different payload with the same key returns conflict. Define sequence scope, gaps policy, fiscal reset, and voided-number reporting.
+**Remediation:** store `(organization_id, operation, idempotency_key, request_hash, result_reference, status, expires_at)` in the same transaction as creation/posting. A repeated identical request returns the original result; a different payload with the same key returns conflict. Define sequence scope, gaps policy, fiscal reset, and voided-number reporting.
 
 ### AIMS-008 and AIMS-009 — authentication hardening (P1)
 
@@ -212,12 +203,12 @@ Compose is suitable for local development, not a production topology. PostgreSQL
 Define and test:
 
 - TLS termination, HSTS, internal-only database/API networking, firewall rules, and trusted proxies.
-- Managed PostgreSQL or documented HA, encrypted storage, PITR, cross-zone backups, tenant-level export/restore, and quarterly restore drills.
-- Explicit RPO/RTO, capacity limits, connection budgets, PgBouncer policy, and tenant pool eviction.
-- Structured JSON logs with request/correlation/user/tenant IDs but no secrets or sensitive payloads.
+- Managed PostgreSQL or documented HA, encrypted storage, PITR, organization-level export/recovery, and quarterly restore drills.
+- Explicit RPO/RTO, capacity limits, connection budgets, and PgBouncer policy.
+- Structured JSON logs with request/correlation/user/organization IDs but no secrets or sensitive payloads.
 - Prometheus/OpenTelemetry export and alerts for error rate, latency, authentication anomalies, pool saturation, failed outbox events, migration lag, disk, backup age, and unbalanced/reconciliation failures.
 - Immutable digest-pinned images, SBOM and provenance, container read-only/rootless policy, resource limits, and rolling/canary deployment with migration compatibility checks.
-- Runbooks for compromised credentials, failed migration, failed tenant provisioning, database outage, restore, and key rotation.
+- Runbooks for compromised credentials, failed migration, database outage, restore, and key rotation.
 
 ### AIMS-013 — file storage and validation (P2)
 
@@ -227,7 +218,7 @@ Move voucher evidence to private object storage; enforce size and decoded pixel 
 
 ### AIMS-015 through AIMS-020 — UI/UX, accessibility, and frontend delivery (P2/P3)
 
-- `DashboardPage.tsx` contains static dollar balances, a fixed October 2026 period, and sample voucher counts. Replace it with tenant/branch-aware APIs or visibly label/remove the page before production.
+- `DashboardPage.tsx` contains static dollar balances, a fixed October 2026 period, and sample voucher counts. Replace it with organization/branch-aware APIs or visibly label/remove the page before production.
 - Routes are protected only by authentication. Add capability-aware route guards and a helpful forbidden page; backend authorization remains authoritative.
 - `Modal.tsx` moves initial focus but does not trap focus, mark the background inert, or restore focus to the opener. It also closes on backdrop/Escape without a consistent dirty-form guard.
 - The custom select uses listbox roles but lacks a complete combobox model and `aria-activedescendant`; its active option is primarily visual.
@@ -248,7 +239,7 @@ These are recommendations, not changes made by this audit:
 - Return paged collection envelopes and stable cursors.
 - Require `Idempotency-Key` for voucher creation/posting/import and persist the result.
 - Use `ETag`/`If-Match` or an explicit required version for all mutable aggregates.
-- Replace client-selected unrestricted company/branch identifiers with a server-resolved `AccessScope`; reject mismatched path, token, tenant, and branch context.
+- Replace client-selected unrestricted company/branch identifiers with a server-resolved `AccessScope`; reject mismatched path, token, organization, and branch context.
 - Separate commands for draft, submit, approve/reject, post, reverse, and void. Do not expose a generic status update.
 - Add normalized error codes alongside human-readable problem details.
 - Add session/MFA endpoints and administrative session revocation.
@@ -268,14 +259,14 @@ Effort is relative and assumes a small experienced product team; architecture an
 
 **Exit:** no known default credentials; security-critical authorization tests pass; release pipeline blocks failed checks.
 
-### Phase 1 — canonical accounting and tenant platform (6-10 weeks)
+### Phase 1 — canonical accounting and organization isolation (6-10 weeks)
 
-- Implement platform/tenant datasources and idempotent tenant provisioning.
+- Strengthen organization-aware constraints and cross-company authorization boundaries in the main datasource.
 - Build canonical accounts, fiscal periods, vouchers, lines, sequences, audit, and outbox schema.
 - Implement maker-checker posting, immutability, reversal, and opening-balance batches.
 - Add integration, concurrency, and property tests.
 
-**Exit:** two tenants operate with proven physical isolation; posted ledgers reconcile under concurrent and retry scenarios.
+**Exit:** two organizations operate with proven logical and authorization isolation; posted ledgers reconcile under concurrent and retry scenarios.
 
 ### Phase 2 — migration and operational readiness (4-8 weeks)
 
@@ -300,13 +291,13 @@ AIMS may be reconsidered for production only when all are true:
 - [ ] One canonical ledger is used by every financial workflow; legacy tables are read-only or retired.
 - [ ] Submit, approve, post, reject, reverse, void, and period-close duties are separated and audited.
 - [ ] Every posted voucher is immutable, balanced, idempotent, and within an open period.
-- [ ] Platform and tenant databases are physically separated; cross-tenant and cross-branch negative tests pass.
+- [ ] Every company-owned query and constraint is organization-scoped; cross-company and cross-branch negative tests pass.
 - [ ] Migration reconciliation proves row counts, account balances, voucher totals, sequences, and attachment hashes.
 - [ ] Production refuses all development defaults and uses managed, rotated secrets.
 - [ ] MFA and privileged step-up authentication are enabled; session theft/replay handling is tested.
 - [ ] API pagination, resource limits, rate limits, and performance SLOs are enforced.
 - [ ] CI runs unit, integration, authorization, migration, frontend, end-to-end, security, and image checks.
-- [ ] Backups, PITR, tenant restore, key rotation, and failed-migration recovery meet signed RPO/RTO targets.
+- [ ] Backups, PITR, organization recovery, key rotation, and failed-migration recovery meet signed RPO/RTO targets.
 - [ ] Logs, metrics, traces, reconciliation alerts, and incident runbooks are operational.
 - [ ] No sample financial data is presented as real; UX and accessibility validation is complete.
 - [ ] Security review, accounting-owner sign-off, and staged release approval are recorded.
@@ -316,7 +307,7 @@ AIMS may be reconsidered for production only when all are true:
 | Workstream | Accountable owner |
 |---|---|
 | Ledger model, posting, reconciliation | Accounting domain lead + backend lead |
-| Platform/tenant databases and migration | Data architect/DBA + backend lead |
+| Organization-scoped database and migration | Data architect/DBA + backend lead |
 | Authentication, authorization, AppSec | Security lead + backend lead |
 | CI/CD, observability, backup/DR | Platform/SRE lead |
 | UX, accessibility, frontend testing | Product design + frontend lead |

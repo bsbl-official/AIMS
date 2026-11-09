@@ -58,15 +58,19 @@ public class VoucherSetupService {
     @Transactional(readOnly = true)
     public List<VoucherSetupResponse> list(UUID companyId, UUID actor) {
         require(actor, companyId, false);
+        var allowedBranches=access.allowedBranchIds(actor,companyId);
         return jdbc.query(SELECT + " WHERE voucher.organization_id = ? ORDER BY branch.code, project.id, finance.id, component.id, voucher.coa_id, voucher.voucher_class, voucher.voucher_type",
-                (rs, rowNum) -> response(rs), companyId);
+                (rs, rowNum) -> response(rs), companyId).stream()
+                .filter(item->allowedBranches.contains(item.branchId())).toList();
     }
 
     @Transactional(readOnly = true)
     public VoucherSetupOptions options(UUID companyId, UUID actor) {
         require(actor, companyId, false);
+        var allowedBranches=access.allowedBranchIds(actor,companyId);
         var branches = jdbc.query("SELECT id, code, name FROM branches WHERE organization_id = ? AND status = 'ACTIVE' ORDER BY code",
-                (rs, rowNum) -> new BranchOption(rs.getObject("id", UUID.class), rs.getString("code"), rs.getString("name")), companyId);
+                (rs, rowNum) -> new BranchOption(rs.getObject("id", UUID.class), rs.getString("code"), rs.getString("name")), companyId)
+                .stream().filter(item->allowedBranches.contains(item.id())).toList();
         var projects = jdbc.query("SELECT id, name FROM project_codes WHERE organization_id = ? AND status = 'ACTIVE' ORDER BY id",
                 (rs, rowNum) -> new ProjectOption(rs.getInt("id"), rs.getString("name")), companyId);
         var finances = jdbc.query("SELECT id, project_code_id, name FROM finance_codes WHERE organization_id = ? AND status = 'ACTIVE' ORDER BY project_code_id, id",
@@ -80,7 +84,7 @@ public class VoucherSetupService {
 
     @Transactional
     public List<VoucherSetupResponse> create(UUID companyId, CreateVoucherSetupRequest request, UUID actor) {
-        require(actor, companyId, true);
+        access.requireBranchPermission(actor,companyId,request.branchId(),"voucher_setup.manage");
         var context = context(companyId, request.branchId(), request.projectCodeId(), request.financeCodeId(), request.componentCodeId(), request.coaId());
         var combinations = new HashSet<String>();
         for (var voucher : request.vouchers()) {
@@ -110,6 +114,9 @@ public class VoucherSetupService {
     @Transactional
     public VoucherSetupResponse update(UUID companyId, UUID id, UpdateVoucherSetupRequest request, UUID actor) {
         require(actor, companyId, true);
+        var existing=find(companyId,id);
+        access.requireBranchPermission(actor,companyId,existing.branchId(),"voucher_setup.manage");
+        access.requireBranchPermission(actor,companyId,request.branchId(),"voucher_setup.manage");
         if (usedByVoucher(companyId, id)) throw new ResponseStatusException(HttpStatus.CONFLICT,
                 "Voucher setup context and type cannot be changed after vouchers have been created");
         var context = context(companyId, request.branchId(), request.projectCodeId(), request.financeCodeId(), request.componentCodeId(), request.coaId());
@@ -137,6 +144,8 @@ public class VoucherSetupService {
     @Transactional
     public VoucherSetupResponse updateControl(UUID companyId, UUID id, UpdateVoucherControlRequest request, UUID actor) {
         require(actor, companyId, true);
+        var existing=find(companyId,id);
+        access.requireBranchPermission(actor,companyId,existing.branchId(),"voucher_setup.manage");
         int updated = jdbc.update("""
                 UPDATE a_vr_type SET auto_voucher = ?, voucher_last_no = ?, voucher_last_date = CURRENT_DATE,
                     upd_user = ?, upd_date = clock_timestamp(), version = version + 1
@@ -159,6 +168,8 @@ public class VoucherSetupService {
     @Transactional
     public void delete(UUID companyId, UUID id, UUID actor) {
         require(actor, companyId, true);
+        var existing=find(companyId,id);
+        access.requireBranchPermission(actor,companyId,existing.branchId(),"voucher_setup.manage");
         if (usedByVoucher(companyId, id)) throw new ResponseStatusException(HttpStatus.CONFLICT,
                 "Voucher setup cannot be deleted after vouchers have been created");
         if (jdbc.update("DELETE FROM a_vr_type WHERE organization_id = ? AND id = ?", companyId, id) == 0) throw missing();

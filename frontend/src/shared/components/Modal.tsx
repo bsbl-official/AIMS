@@ -28,6 +28,7 @@ export function Modal({ open, title, children, onClose, size = 'large', descript
   const titleId = useId()
   const dialogRef = useRef<HTMLElement>(null)
   const onCloseRef = useRef(onClose)
+  const openerRef = useRef<HTMLElement | null>(null)
 
   useEffect(() => {
     onCloseRef.current = onClose
@@ -35,13 +36,31 @@ export function Modal({ open, title, children, onClose, size = 'large', descript
 
   useEffect(() => {
     if (!open) return
+    openerRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null
     const previousOverflow = document.body.style.overflow
     const previousPaddingRight = document.body.style.paddingRight
     const scrollbarWidth = window.innerWidth - document.documentElement.clientWidth
     if (scrollbarWidth > 0) document.body.style.paddingRight = `${scrollbarWidth}px`
     document.body.style.overflow = 'hidden'
-    const closeOnEscape = (event: KeyboardEvent) => event.key === 'Escape' && onCloseRef.current()
-    window.addEventListener('keydown', closeOnEscape)
+    const handleKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        event.preventDefault()
+        onCloseRef.current()
+        return
+      }
+      if (event.key !== 'Tab' || !dialogRef.current) return
+      const focusable = Array.from(dialogRef.current.querySelectorAll<HTMLElement>(
+        'button:not(:disabled), input:not(:disabled), select:not(:disabled), textarea:not(:disabled), a[href], [tabindex]:not([tabindex="-1"])',
+      )).filter((element) => !element.hasAttribute('hidden'))
+      if (!focusable.length) return
+      const first = focusable[0]!
+      const last = focusable[focusable.length - 1]!
+      if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus() }
+      else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus() }
+    }
+    window.addEventListener('keydown', handleKey)
+    const appRoot = document.getElementById('root')
+    appRoot?.setAttribute('inert', '')
     requestAnimationFrame(() => {
       const focusable = dialogRef.current?.querySelector<HTMLElement>('[data-modal-body] input:not(:disabled), [data-modal-body] button:not(:disabled), [data-modal-body] textarea:not(:disabled), [data-modal-body] [tabindex="0"]')
       focusable?.focus()
@@ -49,7 +68,9 @@ export function Modal({ open, title, children, onClose, size = 'large', descript
     return () => {
       document.body.style.overflow = previousOverflow
       document.body.style.paddingRight = previousPaddingRight
-      window.removeEventListener('keydown', closeOnEscape)
+      window.removeEventListener('keydown', handleKey)
+      appRoot?.removeAttribute('inert')
+      openerRef.current?.focus()
     }
   }, [open])
 

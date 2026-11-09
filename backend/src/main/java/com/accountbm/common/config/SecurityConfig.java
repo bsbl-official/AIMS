@@ -22,6 +22,8 @@ import org.springframework.security.web.authentication.session.NullAuthenticated
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationConverter;
+import org.springframework.security.oauth2.server.resource.web.authentication.BearerTokenAuthenticationFilter;
+import com.accountbm.identity.security.SecurityVersionFilter;
 import com.accountbm.common.web.SecurityProblemHandler;
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
@@ -37,6 +39,7 @@ public class SecurityConfig {
     SecurityFilterChain securityFilterChain(
             HttpSecurity http,
             SecurityProblemHandler problemHandler,
+            SecurityVersionFilter securityVersionFilter,
             @Value("${app.auth-cookie.secure}") boolean secureCookies,
             @Value("${app.auth-cookie.same-site}") String sameSite) throws Exception {
         var csrfRepository = CookieCsrfTokenRepository.withHttpOnlyFalse();
@@ -71,6 +74,7 @@ public class SecurityConfig {
                 .oauth2ResourceServer(oauth2 -> oauth2
                         .bearerTokenResolver(cookieBearerTokenResolver())
                         .jwt(jwt -> jwt.jwtAuthenticationConverter(jwtAuthenticationConverter())))
+                .addFilterAfter(securityVersionFilter, BearerTokenAuthenticationFilter.class)
                 .build();
     }
 
@@ -106,7 +110,7 @@ public class SecurityConfig {
         configuration.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
         configuration.setAllowedHeaders(List.of(
                 "Content-Type", "Idempotency-Key", "X-Organization-Id", "X-XSRF-TOKEN"));
-        configuration.setExposedHeaders(List.of("Location", "ETag"));
+        configuration.setExposedHeaders(List.of("Location", "ETag", "X-Request-ID"));
         configuration.setAllowCredentials(true);
 
         var source = new UrlBasedCorsConfigurationSource();

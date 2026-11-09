@@ -43,18 +43,20 @@ public class BranchService {
     @Transactional(readOnly = true)
     public List<BranchResponse> branches(UUID companyId, UUID actorId) {
         access.requireCompanyPermission(actorId, companyId, "branches.read", "branches.manage", "initial_data.read", "initial_data.manage");
+        var allowed = access.allowedBranchIds(actorId, companyId);
         return jdbc.query("""
                 SELECT %s
                 FROM branches branch
                 JOIN organizations organization ON organization.id = branch.organization_id
                 WHERE branch.organization_id = ?
                 ORDER BY CASE branch.branch_type WHEN 'HEAD_OFFICE' THEN 0 ELSE 1 END, branch.name
-                """.formatted(SELECT_COLUMNS), (rs, rowNum) -> response(branch(rs)), companyId);
+                """.formatted(SELECT_COLUMNS), (rs, rowNum) -> response(branch(rs)), companyId)
+                .stream().filter(branch -> allowed.contains(branch.id())).toList();
     }
 
     @Transactional(readOnly = true)
     public BranchResponse branch(UUID companyId, UUID branchId, UUID actorId) {
-        access.requireCompanyPermission(actorId, companyId, "branches.read", "branches.manage", "initial_data.read", "initial_data.manage");
+        access.requireBranchPermission(actorId, companyId, branchId, "branches.read", "branches.manage", "initial_data.read", "initial_data.manage");
         return response(find(companyId, branchId));
     }
 
@@ -84,7 +86,7 @@ public class BranchService {
 
     @Transactional
     public BranchResponse update(UUID companyId, UUID branchId, UpdateBranchRequest request, UUID actorId) {
-        access.requireCompanyPermission(actorId, companyId, "branches.manage");
+        access.requireBranchPermission(actorId, companyId, branchId, "branches.manage");
         validateTimezone(request.timezone());
         var existing = find(companyId, branchId);
         var status = status(request.status());

@@ -12,8 +12,10 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 
 @Component
+@ConditionalOnProperty(name = "app.bootstrap.enabled", havingValue = "true")
 public class IdentityBootstrap implements ApplicationRunner {
     private static final Logger log = LoggerFactory.getLogger(IdentityBootstrap.class);
 
@@ -44,8 +46,8 @@ public class IdentityBootstrap implements ApplicationRunner {
     }
 
     private UUID ensureSuperAdmin() {
-        var users = jdbc.query("SELECT id, password_hash FROM user_profiles WHERE lower(email) = ?",
-                (rs, rowNum) -> new ExistingUser(rs.getObject("id", UUID.class), rs.getString("password_hash")), email);
+        var users = jdbc.query("SELECT id, password_hash, super_admin FROM user_profiles WHERE lower(email) = ?",
+                (rs, rowNum) -> new ExistingUser(rs.getObject("id", UUID.class), rs.getString("password_hash"), rs.getBoolean("super_admin")), email);
         if (users.isEmpty()) {
             var userId = jdbc.queryForObject("""
                     INSERT INTO user_profiles
@@ -56,6 +58,9 @@ public class IdentityBootstrap implements ApplicationRunner {
             return userId;
         }
         var user = users.getFirst();
+        if (!user.superAdmin()) {
+            throw new IllegalStateException("Configured bootstrap email already belongs to a non-administrator account");
+        }
         if (user.passwordHash() == null) {
             jdbc.update("""
                     UPDATE user_profiles SET password_hash = ?, super_admin = true,
@@ -64,11 +69,10 @@ public class IdentityBootstrap implements ApplicationRunner {
                     """, passwordEncoder.encode(password), user.id());
             log.info("Initialized local password for existing bootstrap administrator email={} userId={}", email, user.id());
         } else {
-            jdbc.update("UPDATE user_profiles SET super_admin = true WHERE id = ?", user.id());
             log.info("Bootstrap administrator already exists; configured password was not reapplied email={} userId={}", email, user.id());
         }
         return user.id();
     }
 
-    private record ExistingUser(UUID id, String passwordHash) {}
+    private record ExistingUser(UUID id, String passwordHash, boolean superAdmin) {}
 }

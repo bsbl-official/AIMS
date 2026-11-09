@@ -38,8 +38,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const value = useMemo<AuthContextValue>(() => ({
     user,
     loading,
-    login: async (email, password) => {
-      const session = await authApi.login(email, password)
+    login: async (email, password, mfaCode) => {
+      const session = await authApi.login(email, password, mfaCode)
       setUser(session.user)
     },
     logout: async () => {

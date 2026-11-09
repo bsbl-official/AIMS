@@ -48,6 +48,7 @@ public class InitialDataService {
     @Transactional(readOnly = true)
     public List<InitialDataSummaryResponse> entries(UUID companyId, UUID actor) {
         access.requireCompanyPermission(actor, companyId, "initial_data.read", "initial_data.manage");
+        var allowedBranches=access.allowedBranchIds(actor,companyId);
         return jdbc.query("""
                 SELECT balance.entry_id, balance.branch_id, branch.code branch_code, branch.name branch_name,
                        balance.project_code_id, project.name project_name,
@@ -67,18 +68,21 @@ public class InitialDataService {
                          balance.project_code_id, project.name, balance.finance_code_id, finance.name,
                          balance.component_code_id, component.name, balance.mnyr, balance.financial_year_mnyr
                 ORDER BY max(coalesce(balance.upd_date, balance.ins_date)) DESC
-                """, (rs, rowNum) -> summary(rs), companyId);
+                """, (rs, rowNum) -> summary(rs), companyId)
+                .stream().filter(item->allowedBranches.contains(item.branchId())).toList();
     }
 
     @Transactional(readOnly = true)
     public InitialDataResponse entry(UUID companyId, UUID entryId, UUID actor) {
         access.requireCompanyPermission(actor, companyId, "initial_data.read", "initial_data.manage");
-        return findEntry(companyId, entryId);
+        var result=findEntry(companyId, entryId);
+        access.requireBranchPermission(actor,companyId,result.branchId(),"initial_data.read","initial_data.manage");
+        return result;
     }
 
     @Transactional
     public InitialDataResponse save(UUID companyId, SaveInitialDataRequest request, UUID actor) {
-        access.requireCompanyPermission(actor, companyId, "initial_data.manage");
+        access.requireBranchPermission(actor, companyId, request.branchId(), "initial_data.manage");
         var context = requireContext(companyId, request);
         var selectedMonth = YearMonth.parse(request.monthYear());
         int startMonth = financialYearStartMonth(companyId);

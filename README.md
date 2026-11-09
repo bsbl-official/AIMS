@@ -1,6 +1,6 @@
 # AIMS
 
-Foundation for a multi-user accounting application with a React frontend, Spring Boot backend, a PostgreSQL platform database, and an isolated PostgreSQL database for each company.
+Foundation for a multi-user accounting application with a React frontend, Spring Boot backend, and one PostgreSQL database with organization-scoped company data.
 
 ## Technology
 
@@ -10,7 +10,7 @@ Foundation for a multi-user accounting application with a React frontend, Spring
 
 The backend is a modular monolith. Each business capability has its own top-level package (`organization`, `company`, `branch`, `identity`, `currency`, `fiscal`, `coa`, `journal`, and `audit`). Company and Branch each own their model, DTO, service, and controller layers. This gives strong transaction boundaries now and keeps a future service extraction possible without paying distributed-system costs early.
 
-The local PostgreSQL container is exposed on port `5433` to avoid clashing with an existing PostgreSQL installation. Set `POSTGRES_PORT` and `DB_URL` together if a different host port is required.
+The application uses the existing PostgreSQL installation on the host at `localhost:5432`. Create the `account_bm` database and role before starting the application, and set `DB_PASSWORD` to the password for that role. Local tools use `localhost`; the backend container reaches the same server through `host.docker.internal`.
 
 ## Run the complete stack with Docker
 
@@ -20,27 +20,25 @@ Create a local environment file and set a strong database password:
 Copy-Item .env.example .env
 ```
 
-Also replace `JWT_SECRET` with at least 32 random characters and set a strong
-`SUPER_ADMIN_PASSWORD` before the first start. The development defaults are:
-
-```text
-Email: admin@accountbm.local
-Password: ChangeMe123!
-```
+Fill every blank secret in `.env` before starting the stack. `DB_PASSWORD` must
+match the existing `account_bm` PostgreSQL role, `JWT_SECRET` and
+`MFA_ENCRYPTION_KEY` must each contain at least 32 random bytes, and
+`SUPER_ADMIN_PASSWORD` must be a strong one-time bootstrap password. Configure
+object-storage credentials before enabling attachment storage.
 
 The bootstrap password is used when the administrator is first created. Later
 restarts do not overwrite an existing administrator password.
 
-Build and start PostgreSQL, the API, and the web application:
+Build and start the API and web application:
 
 ```powershell
 docker compose up -d --build --wait
 docker compose ps
 ```
 
-Open the frontend at `http://localhost:5173`. The backend health endpoint is available at `http://localhost:8080/actuator/health`, and PostgreSQL is exposed to pgAdmin or IntelliJ on `localhost:5433`.
+Open the frontend at `http://localhost:5173`. The backend health endpoint is available at `http://localhost:8080/actuator/health`, and PostgreSQL is available to pgAdmin or IntelliJ on `localhost:5432`.
 
-The Compose project is named `account_bm`. Because Docker container names must be unique, its services use `account_bm_frontend`, `account_bm_backend`, and `account_bm_postgres`. The application images are `account_bm_frontend` and `account_bm_backend`.
+The Compose project is named `account_bm`. Its services use `account_bm_frontend` and `account_bm_backend`; PostgreSQL runs outside Compose. The application images are `account_bm_frontend` and `account_bm_backend`.
 
 View logs or stop the stack with:
 
@@ -49,16 +47,15 @@ docker compose logs -f
 docker compose down
 ```
 
-`docker compose down` preserves the PostgreSQL volume. Use `docker compose down --volumes` only when the local accounting database should be permanently deleted.
+`docker compose down` stops only the application containers and does not affect the PostgreSQL database.
 
 ## Start locally
 
 Requirements: Docker, Java 21, and Node.js 22.12 or newer.
 
-The checked-in development defaults work as-is. For custom credentials, export the matching `DB_USERNAME` and `DB_PASSWORD` values for both Docker Compose and Spring Boot; the available settings are listed in `.env.example`.
+The checked-in connection defaults target `localhost:5432`. Set `DB_USERNAME` and `DB_PASSWORD` to the existing PostgreSQL role; the available settings are listed in `.env.example`. When the backend runs in Compose, the JDBC host is automatically changed to `host.docker.internal`.
 
 ```bash
-docker compose up -d postgres
 cd backend
 ./gradlew bootRun
 ```
@@ -106,4 +103,4 @@ The frontend uses Tailwind CSS utilities throughout its reusable layout, button,
 - `V3__identity_authentication.sql`: local credentials, account lockout, refresh-token rotation, and identity-management permissions.
 - `V4__company_and_branch_setup.sql`: company profile fields, operational branches, branch-aware vouchers and sequences, and company/branch permissions.
 
-See [the accounting database design](docs/database-design.md) and the [database-per-company architecture](docs/database-per-company-architecture.md) before adding module tables, tenant routing, or posting logic.
+See [the accounting database design](docs/database-design.md) before adding module tables or posting logic. Every company-scoped query and foreign key must preserve `organization_id` isolation.

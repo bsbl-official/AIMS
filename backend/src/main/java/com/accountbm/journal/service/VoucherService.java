@@ -29,6 +29,7 @@ public class VoucherService {
     @Transactional(readOnly=true)
     public VoucherOptions options(UUID companyId,String voucherClass,UUID actor){
         var config=config(voucherClass); require(companyId,actor,false);
+        var allowedBranches=access.allowedBranchIds(actor,companyId);
         var setups=jdbc.query("""
                 SELECT v.id,v.branch_id,b.code branch_code,b.name branch_name,v.project_code_id,p.name project_name,
                        v.finance_code_id,f.name finance_name,v.component_code_id,c.name component_name,
@@ -43,7 +44,8 @@ public class VoucherService {
                 rs.getString("branch_code"),rs.getString("branch_name"),rs.getInt("project_code_id"),rs.getString("project_name"),
                 rs.getInt("finance_code_id"),rs.getString("finance_name"),rs.getInt("component_code_id"),rs.getString("component_name"),
                 rs.getLong("coa_id"),rs.getString("coa_desc"),rs.getString("voucher_type"),rs.getString("document_type"),
-                rs.getString("voucher_description"),rs.getBoolean("auto_voucher")),companyId,config.voucherClass());
+                rs.getString("voucher_description"),rs.getBoolean("auto_voucher")),companyId,config.voucherClass())
+                .stream().filter(item->allowedBranches.contains(item.branchId())).toList();
         String company=companyCode(companyId);
         var heads=jdbc.query("""
                 SELECT DISTINCT coa_id,l1_code,l2_code,l3_code,l4_code,l5_code,acchead FROM a_acc_head
@@ -57,6 +59,7 @@ public class VoucherService {
     public VoucherNumberPreview numberPreview(UUID companyId,String voucherClass,UUID voucherSetupId,LocalDate voucherDate,UUID actor){
         var c=config(voucherClass); require(companyId,actor,false);
         var selected=setup(companyId,voucherSetupId,c.voucherClass(),false);
+        access.requireBranchPermission(actor,companyId,selected.branchId(),"journal.read","journal.create");
         if(!selected.autoVoucher()) throw bad("Selected Voucher Control uses manual voucher numbering");
         Long current=jdbc.queryForObject("SELECT COALESCE((SELECT last_number FROM a_voucher_daily_sequence WHERE voucher_setup_id=? AND voucher_date=?),0)",Long.class,voucherSetupId,voucherDate);
         return new VoucherNumberPreview(formattedNumber(c.prefix(),voucherDate,(current==null?0:current)+1));
@@ -65,15 +68,18 @@ public class VoucherService {
     @Transactional(readOnly=true)
     public List<VoucherSummary> list(UUID companyId,String voucherClass,String number,LocalDate from,LocalDate to,UUID actor){
         var c=config(voucherClass); require(companyId,actor,false);
-        return jdbc.query("SELECT id,voucher_number,voucher_date,voucher_type,document_type,particulars,total_debit,status,version FROM "+c.master()+" WHERE organization_id=? AND (? IS NULL OR lower(voucher_number) LIKE lower(?)) AND (? IS NULL OR voucher_date>=?) AND (? IS NULL OR voucher_date<=?) ORDER BY voucher_date DESC,voucher_number DESC",
-                (rs,n)->new VoucherSummary(rs.getObject("id",UUID.class),rs.getString("voucher_number"),rs.getDate("voucher_date").toLocalDate(),
-                        rs.getString("voucher_type"),rs.getString("document_type"),rs.getString("particulars"),rs.getBigDecimal("total_debit"),rs.getString("status"),rs.getLong("version")),
-                companyId,blank(number),blank(number)==null?null:"%"+number.strip()+"%",from,from,to,to);
+        var allowedBranches=access.allowedBranchIds(actor,companyId);
+        return jdbc.query("SELECT id,branch_id,voucher_number,voucher_date,voucher_type,document_type,particulars,total_debit,status,version FROM "+c.master()+" WHERE organization_id=? AND (? IS NULL OR lower(voucher_number) LIKE lower(?)) AND (? IS NULL OR voucher_date>=?) AND (? IS NULL OR voucher_date<=?) ORDER BY voucher_date DESC,voucher_number DESC",
+                (rs,n)->new ScopedVoucherSummary(rs.getObject("branch_id",UUID.class),new VoucherSummary(rs.getObject("id",UUID.class),rs.getString("voucher_number"),rs.getDate("voucher_date").toLocalDate(),
+                        rs.getString("voucher_type"),rs.getString("document_type"),rs.getString("particulars"),rs.getBigDecimal("total_debit"),rs.getString("status"),rs.getLong("version"))),
+                companyId,blank(number),blank(number)==null?null:"%"+number.strip()+"%",from,from,to,to)
+                .stream().filter(item->allowedBranches.contains(item.branchId())).map(ScopedVoucherSummary::summary).toList();
     }
 
     @Transactional(readOnly=true)
     public List<CombinedVoucherSummary> listAll(UUID companyId,UUID branchId,String number,LocalDate from,LocalDate to,String voucherClass,UUID actor){
         require(companyId,actor,false);
+        access.requireBranchPermission(actor,companyId,branchId,"journal.read","journal.create");
         if(from!=null&&to!=null&&from.isAfter(to)) throw bad("From date must not be after To date");
         StringBuilder query=new StringBuilder("""
                 SELECT id,voucher_class,voucher_number,voucher_date,voucher_type,document_type,particulars,
@@ -109,7 +115,8 @@ public class VoucherService {
 
     @Transactional(readOnly=true)
     public VoucherResponse get(UUID companyId,String voucherClass,UUID id,UUID actor){
-        var c=config(voucherClass); require(companyId,actor,false); return find(c,companyId,id);
+        var c=config(voucherClass); require(companyId,actor,false); var result=find(c,companyId,id);
+        access.requireBranchPermission(actor,companyId,result.branchId(),"journal.read","journal.create"); return result;
     }
 
     @Transactional
@@ -121,6 +128,7 @@ public class VoucherService {
     public VoucherResponse create(UUID companyId,String voucherClass,CreateVoucherRequest request,VoucherPhoto photo,UUID actor){
         var c=config(voucherClass); require(companyId,actor,true);
         var setup=setup(companyId,request.voucherSetupId(),c.voucherClass(),true);
+        access.requireBranchPermission(actor,companyId,setup.branchId(),"journal.create");
         var totals=validateLines(companyId,setup,request.lines());
         String number=setup.autoVoucher()?allocateNumber(c,setup,request.voucherDate()):normalizeNumber(c,request.voucherNumber());
         UUID id=UUID.randomUUID();
@@ -141,6 +149,7 @@ public class VoucherService {
     public VoucherResponse update(UUID companyId,String voucherClass,UUID id,UpdateVoucherRequest request,UUID actor){
         var c=config(voucherClass); require(companyId,actor,true);
         var existing=find(c,companyId,id); if(!"DRAFT".equals(existing.status())) throw conflict("Only draft vouchers can be edited");
+        access.requireBranchPermission(actor,companyId,existing.branchId(),"journal.create");
         var setup=setup(companyId,existing.voucherSetupId(),c.voucherClass(),false);
         var totals=validateLines(companyId,setup,request.lines());
         int changed=jdbc.update("UPDATE "+c.master()+" SET particulars=?,party_code=?,paid_to=?,cheque_number=?,cheque_date=?,bank_code=?,bank_branch_code=?,reference_bill_number=?,reference_bill_date=?,total_debit=?,total_credit=?,upd_user=?,upd_date=clock_timestamp(),version=version+1 WHERE organization_id=? AND id=? AND status='DRAFT' AND version=?",
@@ -156,9 +165,11 @@ public class VoucherService {
     public VoucherResponse fullUpdate(UUID companyId,String sourceClass,UUID id,FullUpdateVoucherRequest request,VoucherPhoto replacement,UUID actor){
         Config source=config(sourceClass),target=config(request.voucherClass()); require(companyId,actor,true);
         VoucherResponse existing=find(source,companyId,id);
+        access.requireBranchPermission(actor,companyId,existing.branchId(),"journal.create");
         if(!"DRAFT".equals(existing.status())) throw conflict("Only draft vouchers can be edited");
         if(existing.version()!=request.version()) throw conflict("Voucher was changed by another user; reload and try again");
         Setup targetSetup=setup(companyId,request.voucherSetupId(),target.voucherClass(),true);
+        access.requireBranchPermission(actor,companyId,targetSetup.branchId(),"journal.create");
         Totals totals=validateLines(companyId,targetSetup,request.lines());
         boolean identityChanged=!source.master().equals(target.master())
                 || !existing.voucherSetupId().equals(request.voucherSetupId())
@@ -199,6 +210,7 @@ public class VoucherService {
     @Transactional
     public void delete(UUID companyId,String voucherClass,UUID id,UUID actor){
         var c=config(voucherClass); require(companyId,actor,true);
+        var existing=find(c,companyId,id); access.requireBranchPermission(actor,companyId,existing.branchId(),"journal.create");
         if(jdbc.update("DELETE FROM "+c.master()+" WHERE organization_id=? AND id=? AND status='DRAFT'",companyId,id)==0)
             throw new ResponseStatusException(HttpStatus.NOT_FOUND,"Draft voucher was not found");
         audit(companyId,actor,"VOUCHER_DELETED",c.voucherClass(),id);
@@ -207,6 +219,7 @@ public class VoucherService {
     @Transactional(readOnly=true)
     public VoucherPhoto photo(UUID companyId,String voucherClass,UUID id,UUID actor){
         var c=config(voucherClass); require(companyId,actor,false);
+        var existing=find(c,companyId,id); access.requireBranchPermission(actor,companyId,existing.branchId(),"journal.read","journal.create");
         var rows=jdbc.query("SELECT photo_data,photo_name,photo_content_type FROM "+c.master()+" WHERE organization_id=? AND id=? AND photo_data IS NOT NULL",
                 (rs,n)->new VoucherPhoto(rs.getBytes("photo_data"),rs.getString("photo_name"),rs.getString("photo_content_type")),companyId,id);
         if(rows.isEmpty()) throw new ResponseStatusException(HttpStatus.NOT_FOUND,"Voucher photo was not found");
@@ -293,5 +306,6 @@ public class VoucherService {
     private record Setup(UUID id,UUID branchId,Integer projectId,Integer financeId,Integer componentId,Long coaId,String companyCode,String branchCode,String voucherType,String documentType,boolean autoVoucher){}
     private record Totals(BigDecimal debit,BigDecimal credit){}
     private record StoredPhoto(byte[] data,String name,String contentType,int size){}
+    private record ScopedVoucherSummary(UUID branchId,VoucherSummary summary){}
     public record VoucherPhoto(byte[] data,String name,String contentType){}
 }

@@ -3,6 +3,8 @@ package com.accountbm.organization.service;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
+import java.util.Set;
+import java.util.LinkedHashSet;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -82,5 +84,46 @@ public class OrganizationAccessService {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN,
                     "Only a super administrator or company administrator can access financial year setup");
         }
+    }
+
+    public void requireBranchPermission(UUID actorId, UUID companyId, UUID branchId, String... permissions) {
+        requireCompanyPermission(actorId, companyId, permissions);
+        if (isSuperAdmin(actorId)) return;
+        if (branchId == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Branch is required");
+        }
+        var allowed = Boolean.TRUE.equals(jdbc.queryForObject("""
+                SELECT EXISTS (
+                    SELECT 1
+                    FROM organization_memberships membership
+                    JOIN membership_branches membership_branch ON membership_branch.membership_id=membership.id
+                        AND membership_branch.organization_id=membership.organization_id
+                    JOIN branches branch ON branch.id=membership_branch.branch_id
+                        AND branch.organization_id=membership.organization_id
+                    WHERE membership.user_id=? AND membership.organization_id=? AND membership.status='ACTIVE'
+                      AND branch.id=? AND branch.status='ACTIVE'
+                )
+                """, Boolean.class, actorId, companyId, branchId));
+        if (!allowed) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "You do not have access to this branch");
+        }
+    }
+
+    public Set<UUID> allowedBranchIds(UUID actorId, UUID companyId) {
+        if (isSuperAdmin(actorId)) {
+            return new LinkedHashSet<>(jdbc.query("SELECT id FROM branches WHERE organization_id=? ORDER BY id",
+                    (rs, rowNum) -> rs.getObject(1, UUID.class), companyId));
+        }
+        return new LinkedHashSet<>(jdbc.query("""
+                SELECT branch.id
+                FROM organization_memberships membership
+                JOIN membership_branches membership_branch ON membership_branch.membership_id=membership.id
+                    AND membership_branch.organization_id=membership.organization_id
+                JOIN branches branch ON branch.id=membership_branch.branch_id
+                    AND branch.organization_id=membership.organization_id
+                WHERE membership.user_id=? AND membership.organization_id=? AND membership.status='ACTIVE'
+                  AND branch.status='ACTIVE'
+                ORDER BY branch.id
+                """, (rs,rowNum)->rs.getObject(1,UUID.class),actorId,companyId));
     }
 }

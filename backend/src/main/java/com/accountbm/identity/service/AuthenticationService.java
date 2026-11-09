@@ -37,24 +37,32 @@ public class AuthenticationService {
     private final JwtTokenService jwtTokenService;
     private final SecureRandom secureRandom = new SecureRandom();
     private final long refreshTokenDays;
+    private final LoginRateLimitService rateLimit;
+    private final MfaService mfaService;
 
     public AuthenticationService(
             JdbcTemplate jdbc,
             PasswordEncoder passwordEncoder,
             JwtTokenService jwtTokenService,
+            LoginRateLimitService rateLimit,
+            MfaService mfaService,
             @Value("${app.jwt.refresh-token-days}") long refreshTokenDays) {
         this.jdbc = jdbc;
         this.passwordEncoder = passwordEncoder;
         this.jwtTokenService = jwtTokenService;
+        this.rateLimit = rateLimit;
+        this.mfaService = mfaService;
         this.refreshTokenDays = refreshTokenDays;
     }
 
     @Transactional(noRollbackFor = ResponseStatusException.class)
     public TokenResponse login(LoginRequest request, String ipAddress, String userAgent) {
         var email = request.email().strip().toLowerCase(Locale.ROOT);
+        rateLimit.check(email,ipAddress);
         var user = findByEmail(email);
         if (user == null) {
             passwordEncoder.matches(request.password(), DUMMY_HASH);
+            rateLimit.failure(email,ipAddress);
             log.warn("Login rejected: account does not exist email={} ip={}", email, ipAddress);
             throw unauthorized();
         }
@@ -68,42 +76,52 @@ public class AuthenticationService {
         }
         if (user.passwordHash() == null || !passwordEncoder.matches(request.password(), user.passwordHash())) {
             recordFailure(user.id(), user.failedAttempts());
+            rateLimit.failure(email,ipAddress);
             log.warn("Login rejected: password mismatch userId={} failedAttempt={} ip={}", user.id(), user.failedAttempts() + 1, ipAddress);
             throw unauthorized();
         }
+        var mfaVerified=mfaService.verifyForLogin(user.id(),request.mfaCode());
 
         jdbc.update("UPDATE user_profiles SET failed_login_attempts = 0, locked_until = NULL, last_login_at = clock_timestamp(), updated_at = clock_timestamp() WHERE id = ?", user.id());
+        rateLimit.success(email);
         var currentUser = loadCurrentUser(user.id());
         audit(user.id(), "AUTH_LOGIN", ipAddress);
         log.info("Login succeeded userId={} ip={}", user.id(), ipAddress);
-        return issueTokens(currentUser, ipAddress, userAgent, null);
+        return issueTokens(currentUser, ipAddress, userAgent, null, UUID.randomUUID(),
+                mfaVerified ? Instant.now() : null);
     }
 
     @Transactional
     public TokenResponse refresh(String rawToken, String ipAddress, String userAgent) {
         var rows = jdbc.query("""
-                SELECT token.id, token.user_id
+                SELECT token.id, token.user_id, token.family_id, token.mfa_verified_at
                 FROM refresh_tokens token
                 JOIN user_profiles user_profile ON user_profile.id = token.user_id
                 WHERE token.token_hash = ? AND token.revoked_at IS NULL
                   AND token.expires_at > clock_timestamp() AND user_profile.status = 'ACTIVE'
                 FOR UPDATE
-                """, (rs, rowNum) -> new RefreshRow(rs.getObject("id", UUID.class), rs.getObject("user_id", UUID.class)), hash(rawToken));
+                """, (rs, rowNum) -> new RefreshRow(rs.getObject("id", UUID.class), rs.getObject("user_id", UUID.class),
+                rs.getObject("family_id",UUID.class),
+                rs.getTimestamp("mfa_verified_at") == null ? null : rs.getTimestamp("mfa_verified_at").toInstant()), hash(rawToken));
         if (rows.isEmpty()) {
+            detectRefreshReuse(hash(rawToken),ipAddress,userAgent);
             log.warn("Refresh rejected: token is invalid, expired, or revoked ip={}", ipAddress);
             throw unauthorized();
         }
 
         var oldToken = rows.getFirst();
         var currentUser = loadCurrentUser(oldToken.userId());
-        var response = issueTokens(currentUser, ipAddress, userAgent, oldToken.id());
+        var response = issueTokens(currentUser, ipAddress, userAgent, oldToken.id(),oldToken.familyId(),oldToken.mfaVerifiedAt());
         audit(oldToken.userId(), "AUTH_REFRESH", ipAddress);
         return response;
     }
 
     @Transactional
     public void logout(String rawToken) {
-        jdbc.update("UPDATE refresh_tokens SET revoked_at = coalesce(revoked_at, clock_timestamp()) WHERE token_hash = ?", hash(rawToken));
+        jdbc.update("""
+                UPDATE refresh_tokens SET revoked_at=coalesce(revoked_at,clock_timestamp())
+                WHERE family_id=(SELECT family_id FROM refresh_tokens WHERE token_hash=?)
+                """,hash(rawToken));
     }
 
     @Transactional(readOnly = true)
@@ -111,18 +129,34 @@ public class AuthenticationService {
         return loadCurrentUser(id);
     }
 
-    private TokenResponse issueTokens(CurrentUser user, String ipAddress, String userAgent, UUID replacedTokenId) {
-        var access = jwtTokenService.issue(user);
+    private TokenResponse issueTokens(CurrentUser user, String ipAddress, String userAgent, UUID replacedTokenId,
+                                      UUID familyId, Instant mfaVerifiedAt) {
+        var access = jwtTokenService.issue(user, familyId, mfaVerifiedAt);
         var rawRefreshToken = randomToken();
         var refreshId = jdbc.queryForObject("""
-                INSERT INTO refresh_tokens (user_id, token_hash, expires_at, created_ip, user_agent)
-                VALUES (?, ?, ?, cast(? as inet), ?) RETURNING id
+                INSERT INTO refresh_tokens (user_id, token_hash, expires_at, created_ip, user_agent,family_id,mfa_verified_at)
+                VALUES (?, ?, ?, cast(? as inet), ?,?,?) RETURNING id
                 """, UUID.class, user.id(), hash(rawRefreshToken), Timestamp.from(Instant.now().plus(refreshTokenDays, ChronoUnit.DAYS)),
-                blankToNull(ipAddress), trim(userAgent, 500));
+                blankToNull(ipAddress), trim(userAgent, 500),familyId,
+                mfaVerifiedAt == null ? null : Timestamp.from(mfaVerifiedAt));
         if (replacedTokenId != null) {
-            jdbc.update("UPDATE refresh_tokens SET revoked_at = clock_timestamp(), replaced_by_token_id = ? WHERE id = ?", refreshId, replacedTokenId);
+            jdbc.update("UPDATE refresh_tokens SET revoked_at=clock_timestamp(),used_at=clock_timestamp(),replaced_by_token_id=? WHERE id=?",refreshId,replacedTokenId);
         }
         return new TokenResponse(access.value(), rawRefreshToken, access.expiresInSeconds(), user);
+    }
+
+    private void detectRefreshReuse(String tokenHash,String ipAddress,String userAgent){
+        var reused=jdbc.query("SELECT user_id,family_id FROM refresh_tokens WHERE token_hash=? AND revoked_at IS NOT NULL",
+                (rs,n)->new ReusedToken(rs.getObject("user_id",UUID.class),rs.getObject("family_id",UUID.class)),tokenHash);
+        if(reused.isEmpty())return;
+        var token=reused.getFirst();
+        jdbc.update("UPDATE refresh_tokens SET revoked_at=coalesce(revoked_at,clock_timestamp()) WHERE family_id=?",token.familyId());
+        jdbc.update("UPDATE refresh_tokens SET reuse_detected_at=coalesce(reuse_detected_at,clock_timestamp()) WHERE token_hash=?",tokenHash);
+        jdbc.update("UPDATE user_profiles SET security_version=security_version+1,updated_at=clock_timestamp() WHERE id=?",token.userId());
+        jdbc.update("""
+                INSERT INTO security_events(user_id,event_type,ip_address,user_agent,metadata)
+                VALUES(?,'REFRESH_TOKEN_REUSE',cast(? as inet),?,jsonb_build_object('familyId',?))
+                """,token.userId(),blankToNull(ipAddress),trim(userAgent,500),token.familyId().toString());
     }
 
     private CurrentUser loadCurrentUser(UUID userId) {
@@ -238,7 +272,8 @@ public class AuthenticationService {
 
     private record UserLoginRow(UUID id, String passwordHash, String status, int failedAttempts, Instant lockedUntil) {}
     private record CurrentUserBase(UUID id, String email, String displayName, boolean superAdmin,String gender,boolean photoAvailable,long photoVersion) {}
-    private record RefreshRow(UUID id, UUID userId) {}
+    private record RefreshRow(UUID id, UUID userId,UUID familyId,Instant mfaVerifiedAt) {}
+    private record ReusedToken(UUID userId,UUID familyId){}
 
     private static final class OrganizationAccessBuilder {
         private final UUID id;

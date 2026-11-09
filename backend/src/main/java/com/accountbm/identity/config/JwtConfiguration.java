@@ -15,6 +15,10 @@ import org.springframework.security.oauth2.jwt.JwtEncoder;
 import org.springframework.security.oauth2.jwt.JwtValidators;
 import org.springframework.security.oauth2.jwt.NimbusJwtDecoder;
 import org.springframework.security.oauth2.jwt.NimbusJwtEncoder;
+import org.springframework.security.oauth2.core.OAuth2TokenValidator;
+import org.springframework.security.oauth2.core.OAuth2TokenValidatorResult;
+import org.springframework.security.oauth2.core.OAuth2Error;
+import org.springframework.security.oauth2.jwt.Jwt;
 
 @Configuration
 public class JwtConfiguration {
@@ -32,9 +36,14 @@ public class JwtConfiguration {
     }
 
     @Bean
-    JwtDecoder jwtDecoder(SecretKey key, @Value("${app.jwt.issuer}") String issuer) {
+    JwtDecoder jwtDecoder(SecretKey key, @Value("${app.jwt.issuer}") String issuer,
+                          @Value("${app.jwt.audience}") String audience) {
         var decoder = NimbusJwtDecoder.withSecretKey(key).build();
-        decoder.setJwtValidator(new DelegatingOAuth2TokenValidator<>(JwtValidators.createDefaultWithIssuer(issuer)));
+        OAuth2TokenValidator<Jwt> audienceValidator = token -> token.getAudience().contains(audience)
+                ? OAuth2TokenValidatorResult.success()
+                : OAuth2TokenValidatorResult.failure(new OAuth2Error("invalid_token", "Required audience is missing", null));
+        decoder.setJwtValidator(new DelegatingOAuth2TokenValidator<>(
+                JwtValidators.createDefaultWithIssuer(issuer), audienceValidator));
         return decoder;
     }
 }
